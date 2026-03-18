@@ -21,7 +21,7 @@ import {
 import { StorageUsageBar } from "../storage-controls.jsx";
 import { fmt_size_long } from "../utils.js";
 import { fmt_zfs_state, zfs_pool_state_color } from "./utils.jsx";
-import { ZFSDatasetsCard, create_dataset, create_volume, create_snapshot } from "./datasets.jsx";
+import { ZFSDatasetsCard, create_filesystem, create_volume, create_snapshot } from "./datasets.jsx";
 import { ZFSScrubCard } from "./scrub.jsx";
 import { ZFSVdevCard } from "./vdev.jsx";
 import { export_zfs_pool, destroy_zfs_pool, load_zfs_key, unload_zfs_key } from "./dialogs.jsx";
@@ -89,14 +89,14 @@ export function make_zfs_pool_page(parent, pool) {
     });
 
     const datasets_card = new_card({
-        title: _("ZFS datasets"),
+        title: _("ZFS pool"),
         next: scrub_card,
         component: ZFSDatasetsCard,
         props: { pool },
         actions: [
             {
-                title: _("Create dataset"),
-                action: () => create_dataset(pool.path, pool.Name),
+                title: _("Create filesystem"),
+                action: () => create_filesystem(pool.path, pool.Name),
             },
             {
                 title: _("Create volume"),

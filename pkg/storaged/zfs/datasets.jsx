@@ -16,6 +16,10 @@ import { Alert } from "@patternfly/react-core/dist/esm/components/Alert/index.js
 import { Spinner } from "@patternfly/react-core/dist/esm/components/Spinner/index.js";
 import { Badge } from "@patternfly/react-core/dist/esm/components/Badge/index.js";
 
+import { InputGroup, InputGroupItem, InputGroupText } from "@patternfly/react-core/dist/esm/components/InputGroup/index.js";
+import { TextInput as TextInputPF } from "@patternfly/react-core/dist/esm/components/TextInput/index.js";
+import { HelperText, HelperTextItem } from "@patternfly/react-core/dist/esm/components/HelperText/index.js";
+
 import { StorageCard } from "../pages.jsx";
 import { StorageBarMenu, StorageMenuItem } from "../storage-controls.jsx";
 import { dialog_open, TextInput, SelectOne } from "../dialog.jsx";
@@ -25,29 +29,78 @@ const _ = cockpit.gettext;
 
 /* ---- action helpers (exported for use in new_card actions) ---- */
 
-export function create_dataset(pool_path, pool_name) {
-    dialog_open({
-        Title: cockpit.format(_("Create ZFS dataset on $0"), pool_name),
-        Fields: [
-            TextInput("name", _("Name"), {
-                validate: val => {
-                    if (val === "")
-                        return _("Name cannot be empty");
-                    if (val.indexOf("/") >= 0)
-                        return _("Name cannot contain '/'");
-                    if (val.indexOf(" ") >= 0)
-                        return _("Name cannot contain spaces");
-                    return null;
-                }
-            }),
-        ],
-        Action: {
-            Title: _("Create"),
-            action: async function (vals) {
-                await client.zfs_pool_call(pool_path, "CreateDataset", [vals.name, {}]);
-            }
-        }
-    });
+export function create_filesystem(pool_path, pool_name) {
+    // Fetch current datasets to show existing filesystems as hints
+    client.zfs_pool_call(pool_path, "ListDatasets", [{ type: { t: 's', v: 'all' } }])
+            .then(result => {
+                const parsed = result[0].map(parse_dataset);
+                const existing_filesystems = parsed
+                        .filter(d => d.type === "filesystem")
+                        .map(d => d.name);
+
+                const prefix = pool_name + "/";
+
+                dialog_open({
+                    Title: cockpit.format(_("Create ZFS filesystem on $0"), pool_name),
+                    Fields: [
+                        {
+                            tag: "name",
+                            title: _("Name"),
+                            options: {
+                                validate: val => {
+                                    if (val === "")
+                                        return _("Name cannot be empty");
+                                    if (val.indexOf(" ") >= 0)
+                                        return _("Name cannot contain spaces");
+                                    return null;
+                                },
+                            },
+                            initial_value: "",
+                            render: (val, change, validated) => {
+                                const existing_hint = existing_filesystems.length > 0
+                                    ? cockpit.format(_("Existing filesystems: $0"),
+                                                     existing_filesystems.join(", "))
+                                    : _("No existing filesystems");
+
+                                return (
+                                    <>
+                                        <InputGroup>
+                                            <InputGroupText>{prefix}</InputGroupText>
+                                            <InputGroupItem isFill>
+                                                <TextInputPF
+                                                    data-field="name"
+                                                    data-field-type="text-input"
+                                                    validated={validated}
+                                                    aria-label={_("Name")}
+                                                    value={val}
+                                                    placeholder={_("myfilesystem")}
+                                                    onChange={(_event, value) => change(value)} />
+                                            </InputGroupItem>
+                                        </InputGroup>
+                                        <HelperText>
+                                            <HelperTextItem variant="indeterminate">
+                                                {existing_hint}
+                                            </HelperTextItem>
+                                        </HelperText>
+                                    </>
+                                );
+                            }
+                        },
+                    ],
+                    Action: {
+                        Title: _("Create"),
+                        action: async function (vals) {
+                            await client.zfs_pool_call(pool_path, "CreateDataset", [vals.name, {}]);
+                        }
+                    }
+                });
+            })
+            .catch(err => {
+                dialog_open({
+                    Title: _("Error"),
+                    Body: err.toString(),
+                });
+            });
 }
 
 export function create_volume(pool_path, pool_name) {
