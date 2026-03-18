@@ -23,6 +23,7 @@ import { fmt_size_long } from "../utils.js";
 import { fmt_zfs_state, zfs_pool_state_color } from "./utils.jsx";
 import { ZFSDatasetsCard, create_dataset, create_volume, create_snapshot } from "./datasets.jsx";
 import { ZFSScrubCard } from "./scrub.jsx";
+import { ZFSVdevCard } from "./vdev.jsx";
 import { export_zfs_pool, destroy_zfs_pool, load_zfs_key, unload_zfs_key } from "./dialogs.jsx";
 
 const _ = cockpit.gettext;
@@ -73,9 +74,16 @@ export function make_zfs_pool_page(parent, pool) {
         actions: pool_actions,
     });
 
+    const vdev_card = new_card({
+        title: _("ZFS vdev topology"),
+        next: pool_card,
+        component: ZFSVdevCard,
+        props: { pool },
+    });
+
     const scrub_card = new_card({
         title: _("ZFS scrub"),
-        next: pool_card,
+        next: vdev_card,
         component: ZFSScrubCard,
         props: { pool },
     });
