@@ -84,9 +84,10 @@ export function make_block_page(parent, block, card, options) {
         const block_swap = client.blocks_swap[content_block.path];
 
         const block_zfs = client.blocks_zfs[content_block.path];
+        const fsys_zfs = client.blocks_fsys_zfs[content_block.path];
 
-        if (block_zfs) {
-            card = make_zfs_device_card(card, block, content_block, block_zfs);
+        if (block_zfs || fsys_zfs) {
+            card = make_zfs_device_card(card, block, content_block, block_zfs || fsys_zfs);
         } else if (block_btrfs_blockdev) {
             if (single_device_volume)
                 card = make_btrfs_filesystem_card(card, block, content_block);
