@@ -201,3 +201,111 @@ export function unload_zfs_key(pool) {
         }
     });
 }
+
+/* ---- Vdev operations ---- */
+
+export function replace_zfs_vdev(pool, device_path) {
+    dialog_open({
+        Title: cockpit.format(_("Replace device $0"), device_path),
+        Fields: [
+            TextInput("new_device", _("Replacement device"), {
+                validate: val => {
+                    if (val === "")
+                        return _("Device path is required");
+                    return null;
+                }
+            }),
+            CheckBoxes("options", _("Options"), {
+                fields: [
+                    { tag: "force", title: _("Force replace") },
+                ],
+            }),
+        ],
+        Action: {
+            Title: _("Replace"),
+            action: async function (vals) {
+                const force = !!(vals.options && vals.options.force);
+                await client.zfs_pool_call(pool.path, "ReplaceVdev", [device_path, vals.new_device, force, {}]);
+            }
+        }
+    });
+}
+
+export function attach_zfs_vdev(pool, device_path) {
+    dialog_open({
+        Title: cockpit.format(_("Attach mirror to $0"), device_path),
+        Fields: [
+            TextInput("new_device", _("New device"), {
+                validate: val => {
+                    if (val === "")
+                        return _("Device path is required");
+                    return null;
+                }
+            }),
+        ],
+        Action: {
+            Title: _("Attach"),
+            action: async function (vals) {
+                await client.zfs_pool_call(pool.path, "AttachVdev", [device_path, vals.new_device, {}]);
+            }
+        }
+    });
+}
+
+export function detach_zfs_vdev(pool, device_path) {
+    dialog_open({
+        Title: cockpit.format(_("Detach device $0?"), device_path),
+        Body: <div>
+            <p>{cockpit.format(_("Detaching $0 will remove it from its mirror. The remaining device(s) will continue serving data."), device_path)}</p>
+        </div>,
+        Action: {
+            Title: _("Detach"),
+            action: async function () {
+                await client.zfs_pool_call(pool.path, "DetachVdev", [device_path, {}]);
+            }
+        }
+    });
+}
+
+export function online_zfs_vdev(pool, device_path) {
+    dialog_open({
+        Title: cockpit.format(_("Online device $0"), device_path),
+        Fields: [
+            CheckBoxes("options", _("Options"), {
+                fields: [
+                    { tag: "expand", title: _("Expand device to use all available space") },
+                ],
+            }),
+        ],
+        Action: {
+            Title: _("Online"),
+            action: async function (vals) {
+                const expand = !!(vals.options && vals.options.expand);
+                await client.zfs_pool_call(pool.path, "OnlineVdev", [device_path, expand, {}]);
+            }
+        }
+    });
+}
+
+export function offline_zfs_vdev(pool, device_path) {
+    dialog_open({
+        Title: cockpit.format(_("Offline device $0?"), device_path),
+        Body: <div>
+            <p>{cockpit.format(_("Taking $0 offline will make it unavailable for I/O. The pool must have sufficient redundancy to remain operational."), device_path)}</p>
+        </div>,
+        Fields: [
+            CheckBoxes("options", _("Options"), {
+                fields: [
+                    { tag: "temporary", title: _("Temporary (revert on reboot)") },
+                ],
+            }),
+        ],
+        Action: {
+            Title: _("Offline"),
+            action: async function (vals) {
+                const temporary = !!(vals.options && vals.options.temporary);
+                await client.zfs_pool_call(pool.path, "OfflineVdev", [device_path, temporary, {}]);
+            }
+        }
+    });
+}

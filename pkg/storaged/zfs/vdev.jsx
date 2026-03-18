@@ -13,9 +13,13 @@ import { EmptyState, EmptyStateBody } from "@patternfly/react-core/dist/esm/comp
 import { Spinner } from "@patternfly/react-core/dist/esm/components/Spinner/index.js";
 import { Alert } from "@patternfly/react-core/dist/esm/components/Alert/index.js";
 import { Table, Thead, Tbody, Tr, Th, Td } from '@patternfly/react-table';
-
 import { StorageCard } from "../pages.jsx";
+import { StorageBarMenu, StorageMenuItem } from "../storage-controls.jsx";
 import { zfs_pool_state_color, fmt_zfs_state } from "./utils.jsx";
+import {
+    replace_zfs_vdev, attach_zfs_vdev, detach_zfs_vdev,
+    online_zfs_vdev, offline_zfs_vdev,
+} from "./dialogs.jsx";
 
 const _ = cockpit.gettext;
 
@@ -47,7 +51,59 @@ function vdev_type_label(type) {
     }
 }
 
-function renderVdev(vdev, depth, key_prefix) {
+function vdev_actions_menu(pool, vdev, parent_vdev) {
+    // Only show actions for leaf devices (those with a path / actual disk)
+    if (!vdev.path)
+        return null;
+
+    const is_in_mirror = parent_vdev && parent_vdev.type === "mirror";
+    const is_offline = vdev.state === "OFFLINE";
+
+    const items = [];
+
+    if (is_offline) {
+        items.push(
+            <StorageMenuItem key="online"
+                             onClick={() => online_zfs_vdev(pool, vdev.path)}>
+                {_("Online")}
+            </StorageMenuItem>
+        );
+    } else {
+        items.push(
+            <StorageMenuItem key="offline"
+                             onClick={() => offline_zfs_vdev(pool, vdev.path)}>
+                {_("Offline")}
+            </StorageMenuItem>
+        );
+    }
+
+    items.push(
+        <StorageMenuItem key="replace"
+                         onClick={() => replace_zfs_vdev(pool, vdev.path)}>
+            {_("Replace")}
+        </StorageMenuItem>
+    );
+
+    items.push(
+        <StorageMenuItem key="attach"
+                         onClick={() => attach_zfs_vdev(pool, vdev.path)}>
+            {_("Attach mirror")}
+        </StorageMenuItem>
+    );
+
+    if (is_in_mirror) {
+        items.push(
+            <StorageMenuItem key="detach"
+                             onClick={() => detach_zfs_vdev(pool, vdev.path)}>
+                {_("Detach")}
+            </StorageMenuItem>
+        );
+    }
+
+    return <StorageBarMenu label={_("Actions")} isKebab menuItems={items} />;
+}
+
+function renderVdev(pool, vdev, depth, key_prefix, parent_vdev) {
     const indent = depth * 24;
     const state_color = zfs_pool_state_color(vdev.state);
     const state_text = fmt_zfs_state(vdev.state);
@@ -81,12 +137,15 @@ function renderVdev(vdev, depth, key_prefix) {
             <Td style={has_errors ? { color: "var(--pf-t--global--color--status--danger--default)" } : {}}>
                 {vdev.checksum_errors}
             </Td>
+            <Td isActionCell>
+                {vdev_actions_menu(pool, vdev, parent_vdev)}
+            </Td>
         </Tr>
     );
 
     if (vdev.children) {
         vdev.children.forEach((child, idx) => {
-            rows.push(...renderVdev(child, depth + 1, key_prefix + "-" + idx));
+            rows.push(...renderVdev(pool, child, depth + 1, key_prefix + "-" + idx, vdev));
         });
     }
 
@@ -149,10 +208,11 @@ export const ZFSVdevCard = ({ card, pool }) => {
                                 <Th>{_("Read errors")}</Th>
                                 <Th>{_("Write errors")}</Th>
                                 <Th>{_("Checksum errors")}</Th>
+                                <Th />
                             </Tr>
                         </Thead>
                         <Tbody>
-                            { topology.flatMap((vdev, idx) => renderVdev(vdev, 0, "vdev-" + idx)) }
+                            { topology.flatMap((vdev, idx) => renderVdev(pool, vdev, 0, "vdev-" + idx, null)) }
                         </Tbody>
                     </Table>
                 }
