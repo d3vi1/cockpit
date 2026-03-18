@@ -257,7 +257,30 @@ function import_zfs_pool_with_text_fallback() {
 export function import_zfs_pool() {
     client.zfs_manager.ListImportablePools({})
             .then(result => {
-                const pools = result[0] || [];
+                // D-Bus return type is aa{sv}.  Cockpit wraps the return
+                // value in an array: result[0] is the outer array, and
+                // each element is a dict of {key: {t, v}} variants.
+                // Guard against unexpected shapes so we never crash.
+                let raw = result;
+                if (Array.isArray(raw) && !Array.isArray(raw[0]) && raw.length > 0 && typeof raw[0] === 'object' && raw[0] !== null)
+                    raw = raw; // already the array of dicts
+                else if (Array.isArray(raw) && Array.isArray(raw[0]))
+                    raw = raw[0]; // unwrap one layer
+                else
+                    raw = [];
+
+                // Normalise each pool element: the dict values may be
+                // Cockpit D-Bus variants ({t, v}) or plain values.
+                const pools = raw.filter(p => p && typeof p === 'object').map(p => {
+                    const get = (key) => {
+                        const entry = p[key];
+                        if (entry == null) return "";
+                        if (typeof entry === 'object' && 'v' in entry) return entry.v;
+                        return entry;
+                    };
+                    return { name: get("name"), guid: get("guid"), state: get("state") };
+                });
+
                 if (pools.length === 0) {
                     dialog_open({
                         Title: _("Import ZFS pool"),
@@ -272,8 +295,8 @@ export function import_zfs_pool() {
                 }
 
                 const choices = pools.map(p => ({
-                    value: p.name.v,
-                    title: cockpit.format("$0 (GUID $1, $2)", p.name.v, p.guid.v, p.state.v),
+                    value: p.name,
+                    title: cockpit.format("$0 (GUID $1, $2)", p.name, p.guid, p.state),
                 }));
 
                 dialog_open({
