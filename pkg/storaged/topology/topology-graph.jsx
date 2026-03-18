@@ -20,14 +20,57 @@ import {
     VisualizationProvider,
     VisualizationSurface,
     createTopologyControlButtons,
-    defaultLayoutFactory,
-    defaultComponentFactory,
+    ColaLayout,
+    DagreLayout,
+    DefaultEdge,
+    DefaultGroup,
+    DefaultNode,
+    GraphComponent,
+    ModelKind,
+    Graph,
+    withPanZoom,
+    withSelection,
 } from "@patternfly/react-topology";
 
 import { buildTopologyModel, fetchAsyncTopologyData } from "./topology-builder.js";
 import { storageComponentFactory } from "./topology-node.jsx";
 
 import "./topology.scss";
+
+/* ── Layout factory ─────────────────────────────────────────────── */
+
+function storageLayoutFactory(type, graph) {
+    switch (type) {
+        case 'Dagre':
+            return new DagreLayout(graph, {
+                rankdir: 'LR',
+                nodesep: 40,
+                edgesep: 20,
+                ranksep: 80,
+            });
+        case 'Cola':
+            return new ColaLayout(graph);
+        default:
+            return new DagreLayout(graph);
+    }
+}
+
+/* ── Component factory fallback ──────────────────────────────────── */
+
+function defaultStorageComponentFactory(kind, type) {
+    switch (kind) {
+        case ModelKind.graph:
+            return withPanZoom()(GraphComponent);
+        case ModelKind.node:
+            return withSelection()(DefaultNode);
+        case ModelKind.edge:
+            return DefaultEdge;
+        case ModelKind.group:
+            return DefaultGroup;
+        default:
+            return undefined;
+    }
+}
 
 /* ── module-scope singleton ──────────────────────────────────────── */
 
@@ -37,10 +80,9 @@ let lastModelHash = null;
 function getController() {
     if (!controllerInstance) {
         const vis = new Visualization();
-        vis.registerLayoutFactory(defaultLayoutFactory);
-        // Register our custom factory first; fall back to the default.
+        vis.registerLayoutFactory(storageLayoutFactory);
         vis.registerComponentFactory(storageComponentFactory);
-        vis.registerComponentFactory(defaultComponentFactory);
+        vis.registerComponentFactory(defaultStorageComponentFactory);
         controllerInstance = vis;
     }
     return controllerInstance;
