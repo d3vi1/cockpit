@@ -36,32 +36,32 @@ export function make_zfs_pool_page(parent, pool) {
     if (pool.ScrubRunning && !pool.ScrubPaused) {
         pool_actions.push({
             title: _("Pause scrub"),
-            action: () => client.run(() => client.zfs_pool_call(pool.path, "PauseScrub", [{}])),
+            action: () => client.run(() => client.zfs_pool_call(pool.path, "ScrubPause", [{}])),
         });
         pool_actions.push({
             title: _("Stop scrub"),
-            action: () => client.run(() => client.zfs_pool_call(pool.path, "StopScrub", [{}])),
+            action: () => client.run(() => client.zfs_pool_call(pool.path, "ScrubStop", [{}])),
         });
     } else if (pool.ScrubRunning && pool.ScrubPaused) {
         pool_actions.push({
             title: _("Resume scrub"),
-            action: () => client.run(() => client.zfs_pool_call(pool.path, "ResumeScrub", [{}])),
+            action: () => client.run(() => client.zfs_pool_call(pool.path, "ScrubStart", [{}])),
         });
         pool_actions.push({
             title: _("Stop scrub"),
-            action: () => client.run(() => client.zfs_pool_call(pool.path, "StopScrub", [{}])),
+            action: () => client.run(() => client.zfs_pool_call(pool.path, "ScrubStop", [{}])),
         });
     } else {
         pool_actions.push({
             title: _("Start scrub"),
-            action: () => client.run(() => client.zfs_pool_call(pool.path, "StartScrub", [{}])),
+            action: () => client.run(() => client.zfs_pool_call(pool.path, "ScrubStart", [{}])),
         });
     }
 
     // Trim action
     pool_actions.push({
         title: _("Start trim"),
-        action: () => client.run(() => client.zfs_pool_call(pool.path, "StartTrim", [{}])),
+        action: () => client.run(() => client.zfs_pool_call(pool.path, "TrimStart", [{}])),
     });
 
     pool_actions.push({
