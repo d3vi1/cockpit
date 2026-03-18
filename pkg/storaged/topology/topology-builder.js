@@ -20,8 +20,34 @@ const _ = cockpit.gettext;
 
 /* ── helpers ─────────────────────────────────────────────────────── */
 
-const NODE_WIDTH = 120;
+const NODE_WIDTH = 150;
 const NODE_HEIGHT = 65;
+
+/**
+ * Safe string conversion for fmt_size.  In newer Cockpit versions,
+ * cockpit.format_bytes() may return an array or object instead of a
+ * plain string.  Coerce the result so it is always a display string.
+ */
+function safe_fmt_size(bytes) {
+    const result = fmt_size(bytes);
+    if (result == null) return "";
+    if (typeof result === "string") return result;
+    if (Array.isArray(result)) return result.join(" ");
+    return String(result);
+}
+
+/**
+ * Safely coerce a value to a string for use as a node label or badge.
+ * Prevents [object Object] from appearing in the graph.
+ */
+function safeLabel(val) {
+    if (val == null) return "";
+    if (typeof val === "string") return val;
+    if (typeof val === "number") return String(val);
+    if (Array.isArray(val)) return val.join(" ");
+    if (typeof val === "object" && val.v !== undefined) return String(val.v);
+    return String(val);
+}
 
 let _idCounter = 0;
 function uid(prefix) {
@@ -68,14 +94,14 @@ function makeNode(id, type, label, opts) {
     return {
         id,
         type: 'node',
-        label: label || id,
+        label: safeLabel(label) || id,
         width: opts?.width || NODE_WIDTH,
         height: opts?.height || NODE_HEIGHT,
         shape: opts?.shape || NodeShape.rect,
         status: opts?.status || NodeStatus.default,
         data: {
             nodeType: type,
-            badge: opts?.badge,
+            badge: safeLabel(opts?.badge),
             badgeColor: opts?.badgeColor,
             path: opts?.path,
             size: opts?.size,
@@ -127,13 +153,13 @@ export function buildTopologyModel(client, asyncData) {
             continue;
 
         const name = drive_name(drive) || block_short_name(block);
-        const size = drive.Size ? fmt_size(drive.Size) : "";
+        const size = drive.Size ? safe_fmt_size(drive.Size) : "";
         const nodeId = `drive-${path}`;
 
         nodes.push(makeNode(nodeId, 'drive', name, {
             shape: NodeShape.rect,
             status: driveStatus(drive),
-            badge: size,
+            badge: safeLabel(size),
             path,
             size: drive.Size,
         }));
@@ -157,7 +183,7 @@ export function buildTopologyModel(client, asyncData) {
                 continue;
 
             const partName = block_short_name(partBlock);
-            const partSize = fmt_size(part.Size);
+            const partSize = safe_fmt_size(part.Size);
             const partNodeId = `partition-${part.path}`;
 
             nodes.push(makeNode(partNodeId, 'partition', partName, {
@@ -218,7 +244,7 @@ export function buildTopologyModel(client, asyncData) {
         nodes.push(makeNode(nodeId, 'lvm_vg', vgroup.Name, {
             shape: NodeShape.hexagon,
             status: NodeStatus.default,
-            badge: fmt_size(vgroup.Size),
+            badge: safe_fmt_size(vgroup.Size),
             path,
             size: vgroup.Size,
         }));
@@ -306,7 +332,7 @@ export function buildTopologyModel(client, asyncData) {
         nodes.push(makeNode(nodeId, 'zfs_pool', pool.Name, {
             shape: NodeShape.hexagon,
             status: zfsPoolStatus(pool),
-            badge: fmt_size(Number(pool.Size)),
+            badge: safe_fmt_size(Number(pool.Size)),
             path,
             size: Number(pool.Size),
         }));
@@ -383,10 +409,11 @@ export function buildTopologyModel(client, asyncData) {
                         }
                     } else {
                         // Group vdev (mirror, raidz, etc.)
-                        const vdevNodeId = uid(`zfs-vdev-${vdev.type}`);
-                        nodes.push(makeNode(vdevNodeId, 'zfs_vdev', `${vdev.type}`, {
+                        const vdevType = safeLabel(vdev.type);
+                        const vdevNodeId = uid(`zfs-vdev-${vdevType}`);
+                        nodes.push(makeNode(vdevNodeId, 'zfs_vdev', vdevType, {
                             shape: NodeShape.trapezoid,
-                            badge: vdev.type,
+                            badge: vdevType,
                         }));
                         if (parentId)
                             edges.push(makeEdge(vdevNodeId, parentId));
@@ -407,7 +434,7 @@ export function buildTopologyModel(client, asyncData) {
         if (!block)
             continue;
 
-        const mountPoints = fsys.MountPoints.map(decode_filename).filter(Boolean);
+        const mountPoints = fsys.MountPoints.map(mp => safeLabel(decode_filename(mp))).filter(Boolean);
         if (mountPoints.length === 0)
             continue;
 
@@ -442,7 +469,7 @@ export function buildTopologyModel(client, asyncData) {
         const nodeId = `swap-${path}`;
         nodes.push(makeNode(nodeId, 'swap', _("Swap"), {
             shape: NodeShape.ellipse,
-            badge: fmt_size(block.Size),
+            badge: safe_fmt_size(block.Size),
             path,
             size: block.Size,
         }));
@@ -486,6 +513,12 @@ export function buildTopologyModel(client, asyncData) {
             id: 'storage-topology',
             type: 'graph',
             layout: 'Dagre',
+            layoutOptions: {
+                rankdir: 'LR',
+                nodesep: 40,
+                edgesep: 20,
+                ranksep: 80,
+            },
         },
         nodes,
         edges,

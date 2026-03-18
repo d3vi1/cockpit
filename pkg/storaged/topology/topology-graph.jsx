@@ -37,21 +37,69 @@ import { storageComponentFactory } from "./topology-node.jsx";
 
 import "./topology.scss";
 
+/* ── LR Dagre Layout ───────────────────────────────────────────── */
+
+/**
+ * Custom DagreLayout subclass that forces LR (left-to-right) direction
+ * by swapping x/y coordinates after dagre computes a TB layout.
+ *
+ * This works around a bug in @dagrejs/dagre where rankdir: 'LR' is
+ * ignored when compound graphs are used with @patternfly/react-topology.
+ */
+class DagreLRLayout extends DagreLayout {
+    constructor(graph, options) {
+        super(graph, {
+            rankdir: 'LR',
+            nodesep: 40,
+            edgesep: 20,
+            ranksep: 80,
+            nodeDistance: 40,
+            linkDistance: 20,
+            ...options,
+        });
+    }
+
+    startLayout(graph, initialRun, addingNodes) {
+        // Run the standard Dagre TB layout first
+        super.startLayout(graph, initialRun, addingNodes);
+
+        // After dagre finishes (which produces TB positions),
+        // swap x and y coordinates on every node to produce LR flow.
+        if (this.nodes) {
+            this.nodes.forEach(node => {
+                const ox = node.x;
+                const oy = node.y;
+                node.x = oy;
+                node.y = ox;
+                node.update();
+            });
+        }
+        // Also swap edge bendpoints
+        if (this.edges) {
+            this.edges.forEach(edge => {
+                if (edge.bendpoints) {
+                    edge.bendpoints = edge.bendpoints.map(bp => ({
+                        x: bp.y,
+                        y: bp.x,
+                    }));
+                }
+            });
+        }
+    }
+}
+
 /* ── Layout factory ─────────────────────────────────────────────── */
 
 function storageLayoutFactory(type, graph) {
     switch (type) {
         case 'Dagre':
-            return new DagreLayout(graph, {
-                rankdir: 'LR',
-                nodesep: 40,
-                edgesep: 20,
-                ranksep: 80,
-            });
+            return new DagreLRLayout(graph);
         case 'Cola':
-            return new ColaLayout(graph);
+            return new ColaLayout(graph, {
+                flowDirection: 'x',
+            });
         default:
-            return new DagreLayout(graph);
+            return new DagreLRLayout(graph);
     }
 }
 
@@ -117,6 +165,16 @@ export const TopologyGraph = () => {
         if (hash !== lastModelHash) {
             lastModelHash = hash;
             controller.fromModel(model, false);
+            // Explicitly trigger layout after model update to ensure
+            // the Dagre LR direction is applied
+            try {
+                const g = controller.getGraph();
+                if (g) {
+                    g.layout();
+                }
+            } catch (e) {
+                console.warn("topology: explicit layout() call failed:", e);
+            }
         }
     }, [controller, asyncData]);
 
