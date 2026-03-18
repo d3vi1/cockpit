@@ -22,6 +22,7 @@ import { make_encryption_card } from "../crypto/encryption.jsx";
 import { make_btrfs_device_card } from "../btrfs/device.jsx";
 import { make_btrfs_filesystem_card } from "../btrfs/filesystem.jsx";
 import { make_btrfs_subvolume_pages } from "../btrfs/subvolume.jsx";
+import { make_zfs_device_card } from "../zfs/device.jsx";
 
 import { new_page } from "../pages.jsx";
 import { register_available_block_space } from "../utils";
@@ -82,7 +83,11 @@ export function make_block_page(parent, block, card, options) {
         const block_pvol = client.blocks_pvol[content_block.path];
         const block_swap = client.blocks_swap[content_block.path];
 
-        if (block_btrfs_blockdev) {
+        const block_zfs = client.blocks_zfs[content_block.path];
+
+        if (block_zfs) {
+            card = make_zfs_device_card(card, block, content_block, block_zfs);
+        } else if (block_btrfs_blockdev) {
             if (single_device_volume)
                 card = make_btrfs_filesystem_card(card, block, content_block);
             else
