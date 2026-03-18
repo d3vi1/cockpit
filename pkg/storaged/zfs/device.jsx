@@ -14,6 +14,7 @@ import { Flex, FlexItem } from "@patternfly/react-core/dist/esm/layouts/Flex/ind
 
 import { StorageCard, StorageDescription, new_card, register_crossref } from "../pages.jsx";
 import { fmt_zfs_state, zfs_pool_state_color } from "./utils.jsx";
+import { import_zfs_pool } from "./dialogs.jsx";
 
 const _ = cockpit.gettext;
 
@@ -44,15 +45,26 @@ export function make_zfs_device_card(next, block, content_block, zfs_proxy) {
 
     const title = is_zvol ? _("ZFS volume") : _("ZFS pool member");
 
+    const card_actions = [];
+    if (!pool && pool_name && pool_name !== _("Unknown pool")) {
+        card_actions.push({
+            title: _("Import pool"),
+            action: () => import_zfs_pool(),
+        });
+    }
+
     const zfs_card = new_card({
         title,
-        location: pool_name
+        location: pool
             ? {
                 label: pool_name,
                 to: ["zpool", pool_name],
             }
-            : undefined,
+            : pool_name
+                ? { label: pool_name + " " + _("(not imported)") }
+                : undefined,
         next,
+        actions: card_actions,
         component: ZFSDeviceCard,
         props: { block, content_block, zfs_proxy, is_zvol, pool_name, dataset_name },
     });
@@ -81,14 +93,17 @@ const ZFSDeviceCard = ({ card, block, content_block, zfs_proxy, is_zvol, pool_na
             <CardBody>
                 <DescriptionList className="pf-m-horizontal-on-sm">
                     <StorageDescription title={_("ZFS pool")}>
-                        {pool_name
+                        {pool
                             ? <Button variant="link" isInline role="link"
                                    onClick={() => cockpit.location.go(["zpool", pool_name])}>
                                 {pool_name}
                             </Button>
-                            : _("Unknown pool")
+                            : pool_name || _("Unknown pool")
                         }
                     </StorageDescription>
+                    { !pool && pool_name && pool_name !== "Unknown pool" &&
+                    <StorageDescription title={_("Status")} value={_("Not imported")} />
+                    }
                     { is_zvol && dataset_name &&
                     <StorageDescription title={_("Dataset name")} value={dataset_name} />
                     }
