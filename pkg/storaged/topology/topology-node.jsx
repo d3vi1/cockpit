@@ -28,16 +28,25 @@ import { LockIcon } from "@patternfly/react-icons/dist/esm/icons/lock-icon";
 function getIconForType(type) {
     switch (type) {
     case 'drive':
+    case 'disk':
+    case 'partition':
+    case 'lvm_pv':
+    case 'zfs_member':
         return HddIcon;
     case 'lvm_vg':
     case 'zfs_pool':
     case 'zfs_vdev':
     case 'mdraid':
         return CubesIcon;
+    case 'lvm_lv':
+    case 'zfs_dataset':
+        return DatabaseIcon;
     case 'filesystem':
         return FolderOpenIcon;
     case 'encrypted':
         return LockIcon;
+    case 'swap':
+        return DatabaseIcon;
     default:
         return DatabaseIcon;
     }
