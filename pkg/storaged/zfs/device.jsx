@@ -46,23 +46,30 @@ export function make_zfs_device_card(next, block, content_block, zfs_proxy) {
     const title = is_zvol ? _("ZFS volume") : _("ZFS pool member");
 
     const card_actions = [];
-    if (!pool && pool_name && pool_name !== _("Unknown pool")) {
+    const is_spare = !pool && !label;
+    const is_not_imported = !pool && label && !is_zvol;
+
+    if (is_not_imported) {
         card_actions.push({
             title: _("Import pool"),
             action: () => import_zfs_pool(),
         });
     }
 
+    let location;
+    if (pool) {
+        location = { label: pool_name, to: ["zpool", pool_name] };
+    } else if (is_spare) {
+        location = { label: _("Spare device") };
+    } else if (is_not_imported) {
+        location = { label: pool_name + " " + _("(not imported)") };
+    } else if (pool_name) {
+        location = { label: pool_name };
+    }
+
     const zfs_card = new_card({
-        title,
-        location: pool
-            ? {
-                label: pool_name,
-                to: ["zpool", pool_name],
-            }
-            : pool_name
-                ? { label: pool_name + " " + _("(not imported)") }
-                : undefined,
+        title: is_spare ? _("ZFS spare") : title,
+        location,
         next,
         actions: card_actions,
         component: ZFSDeviceCard,
@@ -101,7 +108,10 @@ const ZFSDeviceCard = ({ card, block, content_block, zfs_proxy, is_zvol, pool_na
                             : pool_name || _("Unknown pool")
                         }
                     </StorageDescription>
-                    { !pool && pool_name && pool_name !== "Unknown pool" &&
+                    { !pool && !pool_name &&
+                    <StorageDescription title={_("Status")} value={_("Spare device")} />
+                    }
+                    { !pool && pool_name && pool_name !== _("Unknown pool") &&
                     <StorageDescription title={_("Status")} value={_("Not imported")} />
                     }
                     { is_zvol && dataset_name &&
