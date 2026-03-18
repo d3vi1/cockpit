@@ -11,11 +11,150 @@ import {
     dialog_open, TextInput, SelectOne, SelectSpaces, PassInput, CheckBoxes,
 } from "../dialog.jsx";
 import {
-    get_available_spaces, prepare_available_spaces, decode_filename,
+    decode_filename, block_name, drive_name, fmt_size, block_cmp,
 } from "../utils.js";
 import { navigate_away_from_card } from "../pages.jsx";
 
 const _ = cockpit.gettext;
+
+/* ---- Available block device discovery for ZFS ---- */
+
+/**
+ * Build a list of block devices that are available for ZFS use.
+ *
+ * A device is "available" when all of these hold:
+ *   - Leaf device (no partition table)
+ *   - Not a multipath subordinate (raw sd* behind a dm-* master)
+ *   - Not consumed by LVM, MDRAID, ZFS, Stratis, BTRFS multi-device, swap, or a mounted filesystem
+ *   - Not locked LUKS (unusable without unlocking)
+ *   - Not HintIgnore, not zero-size
+ *
+ * zvols and loop devices are intentionally included.
+ */
+function get_available_zfs_devices() {
+    const available = [];
+
+    // Build a set of block paths that are multipath subordinates.
+    // These should not be shown — only the multipath master (dm-*) is usable.
+    const multipath_subordinates = new Set();
+    for (const drive_path in client.drives_multipath_blocks) {
+        for (const blk of client.drives_multipath_blocks[drive_path])
+            multipath_subordinates.add(blk.path);
+    }
+
+    for (const [path, block] of Object.entries(client.blocks)) {
+        // Skip devices with a partition table (they are containers, not leaf)
+        if (client.blocks_ptable[path])
+            continue;
+
+        // Skip multipath subordinates
+        if (multipath_subordinates.has(path))
+            continue;
+
+        // Skip if HintIgnore
+        if (block.HintIgnore)
+            continue;
+
+        // Skip zero-size devices
+        if (block.Size === 0)
+            continue;
+
+        // Skip if actively consumed by LVM as a physical volume
+        const pvol = client.blocks_pvol[path];
+        if (pvol && client.vgroups[pvol.VolumeGroup])
+            continue;
+
+        // Skip if MDRAID member
+        if (block.MDRaidMember && block.MDRaidMember !== "/")
+            continue;
+
+        // Skip if ZFS pool member (Block.ZFS with an active pool)
+        const block_zfs = client.blocks_zfs[path];
+        if (block_zfs) {
+            const zpool = client.zfs_pools[block_zfs.Pool];
+            if (zpool)
+                continue; // actively part of an imported pool
+        }
+
+        // Skip if Stratis blockdev
+        if (client.blocks_stratis_blockdev[path])
+            continue;
+
+        // Skip if active swap
+        const swap = client.blocks_swap[path];
+        if (swap && swap.Active)
+            continue;
+
+        // Skip if mounted filesystem (has active mount points)
+        const fsys = client.blocks_fsys[path];
+        if (fsys && fsys.MountPoints && fsys.MountPoints.length > 0)
+            continue;
+
+        // Skip if BTRFS multi-device member
+        if (client.blocks_fsys_btrfs && client.blocks_fsys_btrfs[path])
+            continue;
+
+        // Skip if encrypted and locked (cannot be used)
+        if (client.blocks_crypto[path] && !client.blocks_cleartext[path])
+            continue;
+
+        // Skip if it has a recognized IdUsage (e.g. filesystem, crypto, raid)
+        // EXCEPT: allow Filesystem.ZFS (zvols) — the user explicitly wants
+        // to be able to use zvols as vdevs in other pools.
+        if (block.IdUsage) {
+            const is_zvol = !!client.blocks_fsys_zfs[path];
+            if (!is_zvol)
+                continue;
+        }
+
+        // This device is available — format it for display
+        const dev_name = block_name(block);
+        const size = fmt_size(block.Size);
+        const drive = client.drives[block.Drive];
+        const desc = drive ? drive_name(drive) : "";
+
+        available.push({
+            path,
+            device: dev_name,
+            size,
+            description: desc,
+            block,
+        });
+    }
+
+    return available.sort((a, b) => block_cmp(a.block, b.block));
+}
+
+/**
+ * Build SelectOne choices from available ZFS devices.
+ * Returns an array of { value, title } suitable for SelectOne.
+ */
+function get_zfs_device_choices() {
+    const devices = get_available_zfs_devices();
+    return devices.map(d => {
+        const label = d.description
+            ? cockpit.format("$0 $1 ($2)", d.device, d.size, d.description)
+            : cockpit.format("$0 $1", d.device, d.size);
+        return { value: d.device, title: label };
+    });
+}
+
+/**
+ * Build SelectSpaces-compatible space objects from available ZFS devices.
+ * Returns an array of { type, block, size, desc } matching the format
+ * expected by SelectSpaces and prepare_available_spaces.
+ */
+function get_zfs_available_spaces() {
+    const devices = get_available_zfs_devices();
+    return devices.map(d => ({
+        type: 'block',
+        block: d.block,
+        size: d.block.Size,
+        desc: d.description
+            ? cockpit.format("$0 ($1)", d.device, d.description)
+            : d.device,
+    }));
+}
 
 /* ---- Pool creation (Manager.ZFS method) ---- */
 
@@ -34,6 +173,8 @@ export function create_zfs_pool() {
         if (!find_pool(name))
             break;
     }
+
+    const spaces = get_zfs_available_spaces();
 
     dialog_open({
         Title: _("Create ZFS pool"),
@@ -54,12 +195,12 @@ export function create_zfs_pool() {
                 }
             }),
             SelectSpaces("disks", _("Block devices"), {
-                empty_warning: _("No block devices are available."),
+                empty_warning: _("No available block devices were found."),
                 validate: function (disks) {
                     if (disks.length === 0)
                         return _("At least one block device is needed.");
                 },
-                spaces: get_available_spaces(),
+                spaces,
             }),
             SelectOne("vdev_type", _("Layout"), {
                 choices: [
@@ -74,10 +215,8 @@ export function create_zfs_pool() {
         Action: {
             Title: _("Create"),
             action: function (vals) {
-                return prepare_available_spaces(client, vals.disks).then(paths => {
-                    const devs = paths.map(p => decode_filename(client.blocks[p].PreferredDevice));
-                    return client.zfs_manager.PoolCreate(vals.name, devs, vals.vdev_type, {});
-                });
+                const devs = vals.disks.map(spc => decode_filename(spc.block.PreferredDevice));
+                return client.zfs_manager.PoolCreate(vals.name, devs, vals.vdev_type, {});
             }
         }
     });
@@ -254,16 +393,25 @@ export function unload_zfs_key(pool) {
 /* ---- Vdev operations ---- */
 
 export function replace_zfs_vdev(pool, device_path) {
+    const choices = get_zfs_device_choices();
+
+    if (choices.length === 0) {
+        dialog_open({
+            Title: cockpit.format(_("Replace device $0"), device_path),
+            Body: <p>{_("No available block devices found for replacement.")}</p>,
+            Fields: [],
+            Action: {
+                Title: _("Close"),
+                action: function () { /* nothing */ }
+            }
+        });
+        return;
+    }
+
     dialog_open({
         Title: cockpit.format(_("Replace device $0"), device_path),
         Fields: [
-            TextInput("new_device", _("Replacement device"), {
-                validate: val => {
-                    if (val === "")
-                        return _("Device path is required");
-                    return null;
-                }
-            }),
+            SelectOne("new_device", _("Replacement device"), { choices }),
             CheckBoxes("options", _("Options"), {
                 fields: [
                     { tag: "force", title: _("Force replace") },
@@ -281,16 +429,25 @@ export function replace_zfs_vdev(pool, device_path) {
 }
 
 export function attach_zfs_vdev(pool, device_path) {
+    const choices = get_zfs_device_choices();
+
+    if (choices.length === 0) {
+        dialog_open({
+            Title: cockpit.format(_("Attach mirror to $0"), device_path),
+            Body: <p>{_("No available block devices found.")}</p>,
+            Fields: [],
+            Action: {
+                Title: _("Close"),
+                action: function () { /* nothing */ }
+            }
+        });
+        return;
+    }
+
     dialog_open({
         Title: cockpit.format(_("Attach mirror to $0"), device_path),
         Fields: [
-            TextInput("new_device", _("New device"), {
-                validate: val => {
-                    if (val === "")
-                        return _("Device path is required");
-                    return null;
-                }
-            }),
+            SelectOne("new_device", _("New device"), { choices }),
         ],
         Action: {
             Title: _("Attach"),
