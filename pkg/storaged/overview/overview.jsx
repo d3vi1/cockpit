@@ -34,6 +34,7 @@ import { make_nfs_page, nfs_fstab_dialog } from "../nfs/nfs.jsx";
 import { make_iscsi_session_page } from "../iscsi/session.jsx";
 import { make_other_page } from "../block/other.jsx";
 import { make_btrfs_volume_page } from "../btrfs/volume.jsx";
+import { make_zfs_pool_page } from "../zfs/pool.jsx";
 
 const _ = cockpit.gettext;
 
@@ -59,6 +60,7 @@ export function make_overview_page() {
     client.nfs.entries.forEach(e => make_nfs_page(overview_page, e));
     get_other_devices(client).map(p => make_other_page(overview_page, client.blocks[p]));
     Object.keys(client.uuids_btrfs_volume).forEach(uuid => make_btrfs_volume_page(overview_page, uuid));
+    Object.keys(client.zfs_pools).forEach(p => make_zfs_pool_page(overview_page, client.zfs_pools[p]));
 }
 
 const OverviewCard = ({ card, plot_state }) => {
