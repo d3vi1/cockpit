@@ -21,6 +21,18 @@ import { StoragePage } from "./pages.jsx";
 
 import "./storage.scss";
 
+/* Topology graph state singleton — PlotState pattern.
+ *
+ * The topology graph state (layout positions, zoom, pan) must survive
+ * page tree rebuilds (reset_pages() -> make_overview_page()), so it is
+ * kept at module scope inside topology/topology-graph.jsx, just as
+ * PlotState is kept on the Application instance.
+ *
+ * We import the module here so it is evaluated early and the singleton
+ * graphState is available when the overview page mounts.
+ */
+import "./topology/topology-graph.jsx"; // side-effect: initializes graphState singleton
+
 const _ = cockpit.gettext;
 
 class Application extends React.Component {

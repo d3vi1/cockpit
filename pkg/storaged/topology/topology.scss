@@ -1,0 +1,124 @@
+/*
+ * Copyright (C) 2026 Red Hat, Inc.
+ * SPDX-License-Identifier: LGPL-2.1-or-later
+ *
+ * topology.scss — Minimal styling overrides for the storage topology graph.
+ * Most styling comes from @patternfly/react-topology.
+ */
+
+/* Container for the topology graph view */
+.storage-topology-container {
+    position: relative;
+    min-block-size: 400px;
+    block-size: 60vh;
+    max-block-size: 800px;
+    border: 1px solid var(--pf-t--global--border--color--default);
+    border-radius: var(--pf-t--global--border--radius--small);
+    overflow: hidden;
+    background: var(--pf-t--global--background--color--primary--default);
+}
+
+/* Control bar at the top of the graph */
+.storage-topology-controls {
+    position: absolute;
+    inset-block-start: var(--pf-t--global--spacer--sm);
+    inset-inline-end: var(--pf-t--global--spacer--sm);
+    z-index: 10;
+    display: flex;
+    gap: var(--pf-t--global--spacer--xs);
+}
+
+/* Loading / empty state overlay */
+.storage-topology-overlay {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    block-size: 100%;
+    inline-size: 100%;
+}
+
+/* Node badge styles (fallback when react-topology is not loaded) */
+.topology-node-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--pf-t--global--spacer--xs);
+    padding: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm);
+    border: 1px solid var(--pf-t--global--border--color--default);
+    border-radius: var(--pf-t--global--border--radius--small);
+    background: var(--pf-t--global--background--color--primary--default);
+    font-size: var(--pf-t--global--font--size--sm);
+    white-space: nowrap;
+
+    &-icon {
+        display: inline-flex;
+        align-items: center;
+        color: var(--pf-t--global--icon--color--regular);
+    }
+
+    &-label {
+        font-weight: var(--pf-t--global--font--weight--body--bold);
+    }
+
+    &-info {
+        color: var(--pf-t--global--text--color--subtle);
+    }
+
+    &-secondary {
+        color: var(--pf-t--global--text--color--subtle);
+        font-size: var(--pf-t--global--font--size--xs);
+    }
+}
+
+.topology-node-status-ok {
+    border-inline-start: 3px solid var(--pf-t--global--color--status--success--default);
+}
+
+.topology-node-status-warning {
+    border-inline-start: 3px solid var(--pf-t--global--color--status--warning--default);
+}
+
+.topology-node-status-danger {
+    border-inline-start: 3px solid var(--pf-t--global--color--status--danger--default);
+}
+
+.topology-node-status-default {
+    border-inline-start: 3px solid var(--pf-t--global--border--color--default);
+}
+
+/* Fallback table view: simple flat node list when react-topology is unavailable */
+.storage-topology-fallback {
+    padding: var(--pf-t--global--spacer--md);
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--pf-t--global--spacer--sm);
+    overflow-y: auto;
+    max-block-size: 60vh;
+}
+
+/* Ensure the PF topology surface fills its container */
+.storage-topology-container .pf-v6-c-topology {
+    block-size: 100%;
+    inline-size: 100%;
+}
+
+/* Legend */
+.storage-topology-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--pf-t--global--spacer--md);
+    padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
+    border-block-start: 1px solid var(--pf-t--global--border--color--default);
+    font-size: var(--pf-t--global--font--size--sm);
+    color: var(--pf-t--global--text--color--subtle);
+
+    &-item {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--pf-t--global--spacer--xs);
+    }
+
+    &-icon {
+        display: inline-flex;
+        align-items: center;
+    }
+}

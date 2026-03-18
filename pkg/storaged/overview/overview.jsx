@@ -4,7 +4,7 @@
  */
 
 import cockpit from "cockpit";
-import React from "react";
+import React, { useState } from "react";
 import client from "../client";
 
 import { install_dialog } from "cockpit-components-install-dialog.jsx";
@@ -12,6 +12,7 @@ import { install_dialog } from "cockpit-components-install-dialog.jsx";
 import { Card, CardBody } from "@patternfly/react-core/dist/esm/components/Card/index.js";
 import { Stack, StackItem } from "@patternfly/react-core/dist/esm/layouts/Stack/index.js";
 import { DropdownGroup, DropdownList } from '@patternfly/react-core/dist/esm/components/Dropdown/index.js';
+import { Tab, TabTitleText, Tabs } from "@patternfly/react-core/dist/esm/components/Tabs/index.js";
 
 import { StoragePlots } from "../plot.jsx";
 import { StorageMenuItem, StorageBarMenu } from "../storage-controls.jsx";
@@ -36,6 +37,8 @@ import { make_iscsi_session_page } from "../iscsi/session.jsx";
 import { make_other_page } from "../block/other.jsx";
 import { make_btrfs_volume_page } from "../btrfs/volume.jsx";
 import { make_zfs_pool_page } from "../zfs/pool.jsx";
+import { TopologyGraph } from "../topology/topology-graph.jsx";
+import { useIsNarrow } from "../pages.jsx";
 
 const _ = cockpit.gettext;
 
@@ -65,6 +68,8 @@ export function make_overview_page() {
 }
 
 const OverviewCard = ({ card, plot_state }) => {
+    const [activeTab, setActiveTab] = useState("table");
+    const narrow = useIsNarrow();
     function menu_item(feature, title, action) {
         const feature_enabled = !feature || feature.is_enabled();
         const required_package = feature && feature.package;
@@ -180,14 +185,35 @@ const OverviewCard = ({ card, plot_state }) => {
             </StackItem>
             }
             <StackItem>
-                <StorageCard card={card} actions={actions}>
-                    <ChildrenTable
-                        emptyCaption={_("No storage found")}
-                        aria-label={_("Storage")}
-                        show_icons
-                        page={card.page}
-                    />
-                </StorageCard>
+                { narrow
+                    ? <StorageCard card={card} actions={actions}>
+                        <ChildrenTable
+                            emptyCaption={_("No storage found")}
+                            aria-label={_("Storage")}
+                            show_icons
+                            page={card.page}
+                        />
+                    </StorageCard>
+                    : <Tabs activeKey={activeTab}
+                            onSelect={(_, key) => setActiveTab(key)}
+                            aria-label={_("Storage views")}>
+                        <Tab eventKey="table"
+                             title={<TabTitleText>{_("Table")}</TabTitleText>}>
+                            <StorageCard card={card} actions={actions}>
+                                <ChildrenTable
+                                    emptyCaption={_("No storage found")}
+                                    aria-label={_("Storage")}
+                                    show_icons
+                                    page={card.page}
+                                />
+                            </StorageCard>
+                        </Tab>
+                        <Tab eventKey="topology"
+                             title={<TabTitleText>{_("Topology")}</TabTitleText>}>
+                            <TopologyGraph />
+                        </Tab>
+                    </Tabs>
+                }
             </StackItem>
             { !client.in_anaconda_mode() &&
             <StackItem>
