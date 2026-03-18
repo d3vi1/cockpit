@@ -85,7 +85,7 @@ export function create_zfs_pool() {
 
 /* ---- Pool import (Manager.ZFS method) ---- */
 
-export function import_zfs_pool() {
+function import_zfs_pool_with_text_fallback() {
     dialog_open({
         Title: _("Import ZFS pool"),
         Fields: [
@@ -113,6 +113,55 @@ export function import_zfs_pool() {
             }
         }
     });
+}
+
+export function import_zfs_pool() {
+    client.zfs_manager.ListImportablePools({})
+            .then(result => {
+                const pools = result[0] || [];
+                if (pools.length === 0) {
+                    dialog_open({
+                        Title: _("Import ZFS pool"),
+                        Body: <p>{_("No importable ZFS pools were found.")}</p>,
+                        Fields: [],
+                        Action: {
+                            Title: _("Close"),
+                            action: function () { /* nothing to do */ }
+                        }
+                    });
+                    return;
+                }
+
+                const choices = pools.map(p => ({
+                    value: p.name.v,
+                    title: cockpit.format("$0 (GUID $1, $2)", p.name.v, p.guid.v, p.state.v),
+                }));
+
+                dialog_open({
+                    Title: _("Import ZFS pool"),
+                    Fields: [
+                        SelectOne("pool", _("Pool"), { choices }),
+                        CheckBoxes("options", _("Options"), {
+                            fields: [
+                                { tag: "force", title: _("Force import") },
+                            ],
+                        }),
+                    ],
+                    Action: {
+                        Title: _("Import"),
+                        action: async function (vals) {
+                            const options = {};
+                            if (vals.options && vals.options.force)
+                                options.force = { t: 'b', v: true };
+                            await client.zfs_manager.PoolImport(vals.pool, options);
+                        }
+                    }
+                });
+            })
+            .catch(err => {
+                console.warn("ListImportablePools failed, falling back to text input:", err);
+                import_zfs_pool_with_text_fallback();
+            });
 }
 
 /* ---- Pool export ---- */
