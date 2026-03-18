@@ -94,6 +94,7 @@ export const TopologyGraph = () => {
     const controller = useMemo(() => getController(), []);
     const [asyncData, setAsyncData] = useState(null);
     const debounceRef = useRef(null);
+    const hasFittedRef = useRef(false);
 
     // Fetch async data (ZFS vdev topology) on mount
     useEffect(() => {
@@ -121,6 +122,20 @@ export const TopologyGraph = () => {
 
     useEffect(() => {
         updateModel();
+
+        // Auto-fit on first render: wait for the Dagre layout to finish,
+        // then fit the entire graph into the viewport with 80px padding.
+        if (!hasFittedRef.current) {
+            hasFittedRef.current = true;
+            setTimeout(() => {
+                try {
+                    const g = controller.getGraph();
+                    if (g) g.fit(80);
+                } catch (e) {
+                    console.warn("topology: fit-on-first-render failed:", e);
+                }
+            }, 500);
+        }
 
         function onChanged() {
             if (debounceRef.current)
