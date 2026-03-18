@@ -10,6 +10,7 @@ import client from "../client";
 import { CardBody } from "@patternfly/react-core/dist/esm/components/Card/index.js";
 import { DescriptionList } from "@patternfly/react-core/dist/esm/components/DescriptionList/index.js";
 import { Flex, FlexItem } from "@patternfly/react-core/dist/esm/layouts/Flex/index.js";
+import { Badge } from "@patternfly/react-core/dist/esm/components/Badge/index.js";
 
 import { VolumeIcon } from "../icons/gnome-icons.jsx";
 
@@ -21,11 +22,40 @@ import { StorageUsageBar } from "../storage-controls.jsx";
 import { fmt_size_long } from "../utils.js";
 import { fmt_zfs_state, zfs_pool_state_color } from "./utils.jsx";
 import { ZFSDatasetsCard, create_dataset, create_volume, create_snapshot } from "./datasets.jsx";
+import { ZFSScrubCard } from "./scrub.jsx";
+import { export_zfs_pool, destroy_zfs_pool, load_zfs_key, unload_zfs_key } from "./dialogs.jsx";
 
 const _ = cockpit.gettext;
 
 export function make_zfs_pool_page(parent, pool) {
     const use = [Number(pool.Allocated), Number(pool.Size)];
+
+    const pool_actions = [
+        {
+            title: _("Export pool"),
+            action: () => export_zfs_pool(pool),
+        },
+        {
+            title: _("Destroy pool"),
+            action: () => destroy_zfs_pool(pool, pool_card),
+            danger: true,
+        },
+    ];
+
+    // Add encryption key actions if pool has encryption info
+    if (pool.Encryption && pool.Encryption !== "off") {
+        if (pool.KeyLoaded) {
+            pool_actions.splice(pool_actions.length - 1, 0, {
+                title: _("Unload encryption key"),
+                action: () => unload_zfs_key(pool),
+            });
+        } else {
+            pool_actions.splice(pool_actions.length - 1, 0, {
+                title: _("Load encryption key"),
+                action: () => load_zfs_key(pool),
+            });
+        }
+    }
 
     const pool_card = new_card({
         title: _("ZFS pool"),
@@ -40,11 +70,19 @@ export function make_zfs_pool_page(parent, pool) {
         job_path: pool.path,
         component: ZFSPoolCard,
         props: { pool, use },
+        actions: pool_actions,
+    });
+
+    const scrub_card = new_card({
+        title: _("ZFS scrub"),
+        next: pool_card,
+        component: ZFSScrubCard,
+        props: { pool },
     });
 
     const datasets_card = new_card({
         title: _("ZFS datasets"),
-        next: pool_card,
+        next: scrub_card,
         component: ZFSDatasetsCard,
         props: { pool },
         actions: [
@@ -71,11 +109,7 @@ const ZFSPoolCard = ({ card, pool, use }) => {
     const state_text = fmt_zfs_state(pool.State);
     const health_text = fmt_zfs_state(pool.Health);
 
-    const scrub_status = pool.ScrubRunning
-        ? (pool.ScrubPaused
-            ? _("Paused")
-            : cockpit.format(_("Running ($0%)"), (pool.ScrubProgress * 100).toFixed(1)))
-        : _("Not running");
+    const has_encryption = pool.Encryption && pool.Encryption !== "off";
 
     return (
         <StorageCard card={card}>
@@ -104,12 +138,18 @@ const ZFSPoolCard = ({ card, pool, use }) => {
                     { pool.Altroot && pool.Altroot !== "-" &&
                     <StorageDescription title={_("Alternate root")} value={pool.Altroot} />
                     }
-                    <StorageDescription title={_("Scrub")}>
-                        {scrub_status}
-                        { pool.ScrubRunning && pool.ScrubErrors > 0 &&
-                        <span> ({cockpit.format(_("$0 errors"), pool.ScrubErrors)})</span>
-                        }
+                    { has_encryption &&
+                    <StorageDescription title={_("Encryption")}>
+                        <Flex spaceItems={{ default: 'spaceItemsSm' }}>
+                            <FlexItem>{pool.Encryption}</FlexItem>
+                            <FlexItem>
+                                <Badge isRead={!pool.KeyLoaded}>
+                                    {pool.KeyLoaded ? _("Key loaded") : _("Key not loaded")}
+                                </Badge>
+                            </FlexItem>
+                        </Flex>
                     </StorageDescription>
+                    }
                 </DescriptionList>
             </CardBody>
         </StorageCard>

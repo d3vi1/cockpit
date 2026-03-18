@@ -22,6 +22,7 @@ import { create_mdraid } from "../mdraid/create-dialog.jsx";
 import { create_vgroup } from "../lvm2/create-dialog.jsx";
 import { create_stratis_pool } from "../stratis/create-dialog.jsx";
 import { iscsi_change_name, iscsi_discover } from "../iscsi/create-dialog.jsx";
+import { create_zfs_pool, import_zfs_pool } from "../zfs/dialogs.jsx";
 import { get_other_devices } from "../utils.js";
 
 import { new_page, new_card, StorageCard, ChildrenTable } from "../pages.jsx";
@@ -129,10 +130,16 @@ const OverviewCard = ({ card, plot_state }) => {
         is_enabled: () => client.features.iscsi,
     };
 
+    const zfs_feature = {
+        is_enabled: () => client.features.zfs,
+    };
+
     const local_menu_items = [
         menu_item(null, _("Create MDRAID device"), () => create_mdraid()),
         menu_item(lvm2_feature, _("Create LVM2 volume group"), () => create_vgroup()),
         menu_item(stratis_feature, _("Create Stratis pool"), () => create_stratis_pool()),
+        menu_item(zfs_feature, _("Create ZFS pool"), () => create_zfs_pool()),
+        menu_item(zfs_feature, _("Import ZFS pool"), () => import_zfs_pool()),
     ].filter(item => !!item);
 
     const net_menu_items = [
