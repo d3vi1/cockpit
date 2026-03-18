@@ -70,6 +70,7 @@ export function make_overview_page() {
 const OverviewCard = ({ card, plot_state }) => {
     const [activeTab, setActiveTab] = useState("table");
     const narrow = useIsNarrow();
+
     function menu_item(feature, title, action) {
         const feature_enabled = !feature || feature.is_enabled();
         const required_package = feature && feature.package;
