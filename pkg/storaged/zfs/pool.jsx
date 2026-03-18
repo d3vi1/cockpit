@@ -23,7 +23,11 @@ import { fmt_size_long } from "../utils.js";
 import { fmt_zfs_state, zfs_pool_state_color, formatPoolGuid } from "./utils.jsx";
 import { ZFSDatasetsCard, create_filesystem, create_volume, create_snapshot } from "./datasets.jsx";
 import { ZFSVdevCard } from "./vdev.jsx";
-import { export_zfs_pool, destroy_zfs_pool, load_zfs_key, unload_zfs_key } from "./dialogs.jsx";
+import {
+    export_zfs_pool, destroy_zfs_pool, load_zfs_key, unload_zfs_key,
+    stop_trim_zfs_pool, clear_errors_zfs_pool, upgrade_zfs_pool,
+    view_history_zfs_pool, view_edit_pool_properties,
+} from "./dialogs.jsx";
 
 const _ = cockpit.gettext;
 
@@ -58,10 +62,28 @@ export function make_zfs_pool_page(parent, pool) {
         });
     }
 
-    // Trim action
+    // Trim actions
     pool_actions.push({
         title: _("Start trim"),
         action: () => client.run(() => client.zfs_pool_call(pool.path, "TrimStart", [{}])),
+    });
+    pool_actions.push({
+        title: _("Stop trim"),
+        action: () => stop_trim_zfs_pool(pool),
+    });
+
+    // Pool management actions
+    pool_actions.push({
+        title: _("Clear errors"),
+        action: () => clear_errors_zfs_pool(pool),
+    });
+    pool_actions.push({
+        title: _("View history"),
+        action: () => view_history_zfs_pool(pool),
+    });
+    pool_actions.push({
+        title: _("View properties"),
+        action: () => view_edit_pool_properties(pool),
     });
 
     pool_actions.push({
@@ -83,6 +105,12 @@ export function make_zfs_pool_page(parent, pool) {
             });
         }
     }
+
+    pool_actions.push({
+        title: _("Upgrade pool"),
+        action: () => upgrade_zfs_pool(pool),
+        danger: true,
+    });
 
     pool_actions.push({
         title: _("Destroy pool"),

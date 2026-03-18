@@ -24,6 +24,10 @@ import { StorageCard } from "../pages.jsx";
 import { StorageBarMenu, StorageMenuItem } from "../storage-controls.jsx";
 import { dialog_open, TextInput, SelectOne } from "../dialog.jsx";
 import { fmt_size } from "../utils.js";
+import {
+    promote_clone, hold_snapshot, release_snapshot,
+    inherit_property, resize_volume, view_edit_properties,
+} from "./dialogs.jsx";
 
 const _ = cockpit.gettext;
 
@@ -301,6 +305,7 @@ function type_label(type) {
     case "filesystem": return _("Filesystem");
     case "volume": return _("Volume");
     case "snapshot": return _("Snapshot");
+    case "bookmark": return _("Bookmark");
     default: return type;
     }
 }
@@ -310,6 +315,7 @@ function type_badge_color(type) {
     case "filesystem": return "blue";
     case "volume": return "cyan";
     case "snapshot": return "orange";
+    case "bookmark": return "purple";
     default: return "grey";
     }
 }
@@ -362,6 +368,18 @@ export const ZFSDatasetsCard = ({ card, pool }) => {
                                      onClick={() => clone_snapshot(pool_path, d.name)}>
                         {_("Clone")}
                     </StorageMenuItem>,
+                    <StorageMenuItem key="hold"
+                                     onClick={() => hold_snapshot(pool_path, d.name)}>
+                        {_("Add hold")}
+                    </StorageMenuItem>,
+                    <StorageMenuItem key="release"
+                                     onClick={() => release_snapshot(pool_path, d.name)}>
+                        {_("Release hold")}
+                    </StorageMenuItem>,
+                    <StorageMenuItem key="properties"
+                                     onClick={() => view_edit_properties(pool_path, d.name)}>
+                        {_("Properties")}
+                    </StorageMenuItem>,
                     <StorageMenuItem key="destroy" danger
                                      onClick={() => destroy_dataset(pool_path, d.name, d.type)}>
                         {_("Destroy")}
@@ -369,6 +387,8 @@ export const ZFSDatasetsCard = ({ card, pool }) => {
                 ]} />
             );
         }
+
+        const is_clone = d.origin && d.origin !== "-" && d.origin !== "";
 
         return (
             <StorageBarMenu label={_("Actions")} isKebab menuItems={[
@@ -384,9 +404,29 @@ export const ZFSDatasetsCard = ({ card, pool }) => {
                         {_("Mount")}
                     </StorageMenuItem>
                     : null,
+                is_clone
+                    ? <StorageMenuItem key="promote"
+                                       onClick={() => promote_clone(pool_path, d.name)}>
+                        {_("Promote")}
+                    </StorageMenuItem>
+                    : null,
+                d.type === "volume"
+                    ? <StorageMenuItem key="resize"
+                                       onClick={() => resize_volume(pool_path, d.name)}>
+                        {_("Resize")}
+                    </StorageMenuItem>
+                    : null,
+                <StorageMenuItem key="inherit"
+                                 onClick={() => inherit_property(pool_path, d.name)}>
+                    {_("Inherit property")}
+                </StorageMenuItem>,
                 <StorageMenuItem key="rename"
                                  onClick={() => rename_dataset(pool_path, d.name)}>
                     {_("Rename")}
+                </StorageMenuItem>,
+                <StorageMenuItem key="properties"
+                                 onClick={() => view_edit_properties(pool_path, d.name)}>
+                    {_("Properties")}
                 </StorageMenuItem>,
                 <StorageMenuItem key="destroy" danger
                                  onClick={() => destroy_dataset(pool_path, d.name, d.type)}>
@@ -409,6 +449,7 @@ export const ZFSDatasetsCard = ({ card, pool }) => {
                                 <FormSelectOption value="filesystem" label={_("Filesystems")} />
                                 <FormSelectOption value="volume" label={_("Volumes")} />
                                 <FormSelectOption value="snapshot" label={_("Snapshots")} />
+                                <FormSelectOption value="bookmark" label={_("Bookmarks")} />
                             </FormSelect>
                         </ToolbarItem>
                     </ToolbarContent>

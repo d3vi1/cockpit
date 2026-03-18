@@ -516,6 +516,314 @@ export function online_zfs_vdev(pool, device_path) {
     });
 }
 
+/* ---- Pool-level: Stop trim ---- */
+
+export function stop_trim_zfs_pool(pool) {
+    dialog_open({
+        Title: cockpit.format(_("Stop TRIM on pool $0?"), pool.Name),
+        Body: <div>
+            <p>{cockpit.format(_("This will cancel the running TRIM operation on pool $0."), pool.Name)}</p>
+        </div>,
+        Action: {
+            Title: _("Stop trim"),
+            action: async function () {
+                await client.zfs_pool_call(pool.path, "TrimStop", [{}]);
+            }
+        }
+    });
+}
+
+/* ---- Pool-level: Clear errors ---- */
+
+export function clear_errors_zfs_pool(pool) {
+    dialog_open({
+        Title: cockpit.format(_("Clear errors on pool $0?"), pool.Name),
+        Body: <div>
+            <p>{cockpit.format(_("This will clear all error counters for pool $0."), pool.Name)}</p>
+        </div>,
+        Action: {
+            Title: _("Clear errors"),
+            action: async function () {
+                await client.zfs_pool_call(pool.path, "ClearErrors", ["", {}]);
+            }
+        }
+    });
+}
+
+/* ---- Pool-level: Upgrade pool ---- */
+
+export function upgrade_zfs_pool(pool) {
+    dialog_open({
+        Title: cockpit.format(_("Upgrade pool $0?"), pool.Name),
+        Body: <div>
+            <p>{cockpit.format(_("Upgrading pool $0 to the latest on-disk format version is irreversible. Once upgraded, the pool cannot be imported on systems running older ZFS versions."), pool.Name)}</p>
+        </div>,
+        Action: {
+            DangerButton: true,
+            Danger: _("This operation is irreversible. The pool will not be compatible with older ZFS versions."),
+            Title: _("Upgrade"),
+            action: async function () {
+                await client.zfs_pool_call(pool.path, "Upgrade", [{}]);
+            }
+        }
+    });
+}
+
+/* ---- Pool-level: View history ---- */
+
+export function view_history_zfs_pool(pool) {
+    client.zfs_pool_call(pool.path, "GetHistory", [{}])
+            .then(result => {
+                const history_text = result[0] || _("No history available.");
+                dialog_open({
+                    Title: cockpit.format(_("History for pool $0"), pool.Name),
+                    Body: <pre style={{ whiteSpace: "pre-wrap", maxHeight: "400px", overflow: "auto" }}>{history_text}</pre>,
+                    Fields: [],
+                    Action: {
+                        Title: _("Close"),
+                        action: function () { /* nothing */ }
+                    }
+                });
+            })
+            .catch(err => {
+                dialog_open({
+                    Title: _("Error"),
+                    Body: err.toString(),
+                });
+            });
+}
+
+/* ---- Dataset: Promote clone ---- */
+
+export function promote_clone(pool_path, clone_name) {
+    dialog_open({
+        Title: cockpit.format(_("Promote clone $0?"), clone_name),
+        Body: <div>
+            <p>{cockpit.format(_("Promoting $0 will reverse the parent-child relationship with its origin snapshot. The clone will become independent."), clone_name)}</p>
+        </div>,
+        Action: {
+            Title: _("Promote"),
+            action: async function () {
+                await client.zfs_pool_call(pool_path, "PromoteClone", [clone_name, {}]);
+            }
+        }
+    });
+}
+
+/* ---- Snapshot: Hold ---- */
+
+export function hold_snapshot(pool_path, snapshot_name) {
+    dialog_open({
+        Title: cockpit.format(_("Add hold on snapshot $0"), snapshot_name),
+        Fields: [
+            TextInput("tag", _("Hold tag"), {
+                validate: val => {
+                    if (val === "")
+                        return _("Tag name is required");
+                    if (/\s/.test(val))
+                        return _("Tag cannot contain spaces");
+                    return null;
+                }
+            }),
+        ],
+        Action: {
+            Title: _("Hold"),
+            action: async function (vals) {
+                await client.zfs_pool_call(pool_path, "HoldSnapshot", [snapshot_name, vals.tag, {}]);
+            }
+        }
+    });
+}
+
+/* ---- Snapshot: Release ---- */
+
+export function release_snapshot(pool_path, snapshot_name) {
+    dialog_open({
+        Title: cockpit.format(_("Release hold on snapshot $0"), snapshot_name),
+        Fields: [
+            TextInput("tag", _("Hold tag"), {
+                validate: val => {
+                    if (val === "")
+                        return _("Tag name is required");
+                    return null;
+                }
+            }),
+        ],
+        Action: {
+            Title: _("Release"),
+            action: async function (vals) {
+                await client.zfs_pool_call(pool_path, "ReleaseSnapshot", [snapshot_name, vals.tag, {}]);
+            }
+        }
+    });
+}
+
+/* ---- Dataset: Inherit property ---- */
+
+export function inherit_property(pool_path, dataset_name) {
+    dialog_open({
+        Title: cockpit.format(_("Inherit property on $0"), dataset_name),
+        Fields: [
+            SelectOne("property", _("Property"), {
+                choices: [
+                    { value: "compression", title: _("compression") },
+                    { value: "atime", title: _("atime") },
+                    { value: "relatime", title: _("relatime") },
+                    { value: "dedup", title: _("dedup") },
+                    { value: "sync", title: _("sync") },
+                    { value: "recordsize", title: _("recordsize") },
+                    { value: "mountpoint", title: _("mountpoint") },
+                    { value: "quota", title: _("quota") },
+                    { value: "reservation", title: _("reservation") },
+                    { value: "acltype", title: _("acltype") },
+                    { value: "xattr", title: _("xattr") },
+                    { value: "checksum", title: _("checksum") },
+                    { value: "readonly", title: _("readonly") },
+                    { value: "canmount", title: _("canmount") },
+                    { value: "logbias", title: _("logbias") },
+                    { value: "primarycache", title: _("primarycache") },
+                    { value: "secondarycache", title: _("secondarycache") },
+                    { value: "snapdir", title: _("snapdir") },
+                ],
+            }),
+        ],
+        Action: {
+            Title: _("Inherit"),
+            action: async function (vals) {
+                await client.zfs_pool_call(pool_path, "InheritProperty", [dataset_name, vals.property, {}]);
+            }
+        }
+    });
+}
+
+/* ---- Volume: Resize ---- */
+
+export function resize_volume(pool_path, volume_name) {
+    dialog_open({
+        Title: cockpit.format(_("Resize volume $0"), volume_name),
+        Fields: [
+            TextInput("new_size", _("New size (bytes)"), {
+                validate: val => {
+                    const n = Number(val);
+                    if (isNaN(n) || n <= 0)
+                        return _("Size must be a positive number");
+                    return null;
+                }
+            }),
+        ],
+        Action: {
+            Title: _("Resize"),
+            action: async function (vals) {
+                await client.zfs_pool_call(pool_path, "ResizeVolume", [volume_name, Number(vals.new_size), {}]);
+            }
+        }
+    });
+}
+
+/* ---- Dataset: View/Edit properties ---- */
+
+export function view_edit_properties(pool_path, dataset_name) {
+    /* This dialog is used for both pool and dataset properties.
+     * It fetches all properties via GetDatasetProperty for a list of
+     * well-known properties, displays them in a table, and allows
+     * editing and inheriting individual values. */
+
+    const known_properties = [
+        "compression", "atime", "relatime", "dedup", "sync",
+        "recordsize", "mountpoint", "quota", "reservation",
+        "acltype", "xattr", "checksum", "readonly", "canmount",
+        "logbias", "primarycache", "secondarycache", "snapdir",
+        "encryption", "keyformat", "keylocation",
+        "used", "available", "referenced", "compressratio",
+    ];
+
+    /* Build an array of promises to fetch each property */
+    const fetches = known_properties.map(prop =>
+        client.zfs_pool_call(pool_path, "GetDatasetProperty", [dataset_name, prop, {}])
+                .then(result => ({
+                    name: prop,
+                    value: result[0] || "-",
+                    source: result[1] || "-",
+                }))
+                .catch(() => ({
+                    name: prop,
+                    value: "-",
+                    source: "-",
+                }))
+    );
+
+    Promise.all(fetches).then(props => {
+        /* Format properties as a readable text table */
+        const lines = props.map(p =>
+            cockpit.format("$0\t$1\t($2)", p.name, p.value, p.source)
+        ).join("\n");
+
+        const header = cockpit.format("$0\t$1\t$2", _("Property"), _("Value"), _("Source"));
+
+        dialog_open({
+            Title: cockpit.format(_("Properties of $0"), dataset_name),
+            Body: <pre style={{ whiteSpace: "pre-wrap", maxHeight: "400px", overflow: "auto", fontFamily: "monospace", fontSize: "12px" }}>
+                {header + "\n" + "─".repeat(60) + "\n" + lines}
+            </pre>,
+            Fields: [],
+            Action: {
+                Title: _("Close"),
+                action: function () { /* nothing */ }
+            }
+        });
+    });
+}
+
+/* ---- Pool: View/Edit properties ---- */
+
+export function view_edit_pool_properties(pool) {
+    const pool_path = pool.path;
+    const pool_name = pool.Name;
+
+    const known_properties = [
+        "ashift", "autoexpand", "autoreplace", "autotrim",
+        "bootfs", "cachefile", "comment", "dedupditto",
+        "delegation", "failmode", "feature@async_destroy",
+        "fragmentation", "freeing", "guid", "health",
+        "listsnapshots", "multihost", "readonly", "size",
+        "version",
+    ];
+
+    const fetches = known_properties.map(prop =>
+        client.zfs_pool_call(pool_path, "GetProperty", [prop, {}])
+                .then(result => ({
+                    name: prop,
+                    value: result[0] || "-",
+                    source: result[1] || "-",
+                }))
+                .catch(() => ({
+                    name: prop,
+                    value: "-",
+                    source: "-",
+                }))
+    );
+
+    Promise.all(fetches).then(props => {
+        const lines = props.map(p =>
+            cockpit.format("$0\t$1\t($2)", p.name, p.value, p.source)
+        ).join("\n");
+
+        const header = cockpit.format("$0\t$1\t$2", _("Property"), _("Value"), _("Source"));
+
+        dialog_open({
+            Title: cockpit.format(_("Properties of pool $0"), pool_name),
+            Body: <pre style={{ whiteSpace: "pre-wrap", maxHeight: "400px", overflow: "auto", fontFamily: "monospace", fontSize: "12px" }}>
+                {header + "\n" + "─".repeat(60) + "\n" + lines}
+            </pre>,
+            Fields: [],
+            Action: {
+                Title: _("Close"),
+                action: function () { /* nothing */ }
+            }
+        });
+    });
+}
+
 export function offline_zfs_vdev(pool, device_path) {
     dialog_open({
         Title: cockpit.format(_("Offline device $0?"), device_path),
