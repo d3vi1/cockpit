@@ -824,6 +824,50 @@ export function view_edit_pool_properties(pool) {
     });
 }
 
+/* ---- Pool-level: Add vdev ---- */
+
+export function add_vdev_to_pool(pool) {
+    const spaces = get_zfs_available_spaces();
+
+    dialog_open({
+        Title: cockpit.format(_("Add vdev to $0"), pool.Name),
+        Fields: [
+            SelectSpaces("disks", _("Block devices"), {
+                empty_warning: _("No available block devices were found."),
+                validate: function (disks) {
+                    if (disks.length === 0)
+                        return _("At least one block device is needed.");
+                },
+                spaces,
+            }),
+            SelectOne("vdev_type", _("Vdev type"), {
+                choices: [
+                    { value: "", title: _("Stripe (no redundancy)") },
+                    { value: "mirror", title: _("Mirror") },
+                    { value: "raidz", title: _("RAIDZ") },
+                    { value: "raidz2", title: _("RAIDZ2") },
+                    { value: "raidz3", title: _("RAIDZ3") },
+                ],
+            }),
+            CheckBoxes("options", _("Options"), {
+                fields: [
+                    { tag: "force", title: _("Force (allow mismatched vdev topology)") },
+                ],
+            }),
+        ],
+        Action: {
+            Title: _("Add vdev"),
+            action: async function (vals) {
+                const block_paths = vals.disks.map(spc => spc.block.path);
+                const options = {};
+                if (vals.options && vals.options.force)
+                    options.force = { t: 'b', v: true };
+                await client.zfs_pool_call(pool.path, "AddVdev", [vals.vdev_type, block_paths, options]);
+            }
+        }
+    });
+}
+
 export function offline_zfs_vdev(pool, device_path) {
     dialog_open({
         Title: cockpit.format(_("Offline device $0?"), device_path),

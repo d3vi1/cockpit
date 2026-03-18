@@ -12,7 +12,7 @@ import { install_dialog } from "cockpit-components-install-dialog.jsx";
 import { Card, CardBody } from "@patternfly/react-core/dist/esm/components/Card/index.js";
 import { Stack, StackItem } from "@patternfly/react-core/dist/esm/layouts/Stack/index.js";
 import { DropdownGroup, DropdownList } from '@patternfly/react-core/dist/esm/components/Dropdown/index.js';
-import { Tab, TabTitleText, Tabs } from "@patternfly/react-core/dist/esm/components/Tabs/index.js";
+import { ToggleGroup, ToggleGroupItem } from "@patternfly/react-core/dist/esm/components/ToggleGroup/index.js";
 
 import { StoragePlots } from "../plot.jsx";
 import { StorageMenuItem, StorageBarMenu } from "../storage-controls.jsx";
@@ -172,7 +172,21 @@ const OverviewCard = ({ card, plot_state }) => {
                 </DropdownList>
             </DropdownGroup>);
 
-    const actions = <StorageBarMenu label={_("Create storage device")} menuItems={groups} />;
+    const viewToggle = !narrow
+        ? <ToggleGroup aria-label={_("Storage views")}>
+            <ToggleGroupItem text={_("Table")}
+                             isSelected={activeTab === "table"}
+                             onChange={() => setActiveTab("table")} />
+            <ToggleGroupItem text={_("Topology")}
+                             isSelected={activeTab === "topology"}
+                             onChange={() => setActiveTab("topology")} />
+        </ToggleGroup>
+        : null;
+
+    const actions = <>
+        {viewToggle}
+        <StorageBarMenu label={_("Create storage device")} menuItems={groups} />
+    </>;
 
     return (
         <Stack hasGutter>
@@ -186,35 +200,17 @@ const OverviewCard = ({ card, plot_state }) => {
             </StackItem>
             }
             <StackItem>
-                { narrow
-                    ? <StorageCard card={card} actions={actions}>
-                        <ChildrenTable
+                <StorageCard card={card} actions={actions}>
+                    { (narrow || activeTab === "table")
+                        ? <ChildrenTable
                             emptyCaption={_("No storage found")}
                             aria-label={_("Storage")}
                             show_icons
                             page={card.page}
                         />
-                    </StorageCard>
-                    : <Tabs activeKey={activeTab}
-                            onSelect={(_, key) => setActiveTab(key)}
-                            aria-label={_("Storage views")}>
-                        <Tab eventKey="table"
-                             title={<TabTitleText>{_("Table")}</TabTitleText>}>
-                            <StorageCard card={card} actions={actions}>
-                                <ChildrenTable
-                                    emptyCaption={_("No storage found")}
-                                    aria-label={_("Storage")}
-                                    show_icons
-                                    page={card.page}
-                                />
-                            </StorageCard>
-                        </Tab>
-                        <Tab eventKey="topology"
-                             title={<TabTitleText>{_("Topology")}</TabTitleText>}>
-                            <TopologyGraph />
-                        </Tab>
-                    </Tabs>
-                }
+                        : <TopologyGraph />
+                    }
+                </StorageCard>
             </StackItem>
             { !client.in_anaconda_mode() &&
             <StackItem>

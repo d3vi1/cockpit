@@ -26,7 +26,7 @@ import { ZFSVdevCard } from "./vdev.jsx";
 import {
     export_zfs_pool, destroy_zfs_pool, load_zfs_key, unload_zfs_key,
     stop_trim_zfs_pool, clear_errors_zfs_pool, upgrade_zfs_pool,
-    view_history_zfs_pool, view_edit_pool_properties,
+    view_history_zfs_pool, view_edit_pool_properties, add_vdev_to_pool,
 } from "./dialogs.jsx";
 
 const _ = cockpit.gettext;
@@ -84,6 +84,11 @@ export function make_zfs_pool_page(parent, pool) {
     pool_actions.push({
         title: _("View properties"),
         action: () => view_edit_pool_properties(pool),
+    });
+
+    pool_actions.push({
+        title: _("Add vdev"),
+        action: () => add_vdev_to_pool(pool),
     });
 
     pool_actions.push({
