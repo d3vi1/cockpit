@@ -17,6 +17,15 @@ export function zfs_pool_state_color(state) {
     }
 }
 
+export function formatPoolGuid(guid) {
+    if (!guid) return "";
+    try {
+        return "0x" + BigInt(guid).toString(16).toUpperCase();
+    } catch (e) {
+        return guid; // fallback to raw value
+    }
+}
+
 export function fmt_zfs_state(state) {
     switch (state) {
     case "ONLINE": return _("Online");

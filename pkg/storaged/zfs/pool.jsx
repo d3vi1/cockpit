@@ -20,9 +20,8 @@ import {
 } from "../pages.jsx";
 import { StorageUsageBar } from "../storage-controls.jsx";
 import { fmt_size_long } from "../utils.js";
-import { fmt_zfs_state, zfs_pool_state_color } from "./utils.jsx";
+import { fmt_zfs_state, zfs_pool_state_color, formatPoolGuid } from "./utils.jsx";
 import { ZFSDatasetsCard, create_filesystem, create_volume, create_snapshot } from "./datasets.jsx";
-import { ZFSScrubCard } from "./scrub.jsx";
 import { ZFSVdevCard } from "./vdev.jsx";
 import { export_zfs_pool, destroy_zfs_pool, load_zfs_key, unload_zfs_key } from "./dialogs.jsx";
 
@@ -31,32 +30,65 @@ const _ = cockpit.gettext;
 export function make_zfs_pool_page(parent, pool) {
     const use = [Number(pool.Allocated), Number(pool.Size)];
 
-    const pool_actions = [
-        {
-            title: _("Export pool"),
-            action: () => export_zfs_pool(pool),
-        },
-        {
-            title: _("Destroy pool"),
-            action: () => destroy_zfs_pool(pool, pool_card),
-            danger: true,
-        },
-    ];
+    const pool_actions = [];
+
+    // Scrub actions (contextual)
+    if (pool.ScrubRunning && !pool.ScrubPaused) {
+        pool_actions.push({
+            title: _("Pause scrub"),
+            action: () => client.run(() => client.zfs_pool_call(pool.path, "PauseScrub", [{}])),
+        });
+        pool_actions.push({
+            title: _("Stop scrub"),
+            action: () => client.run(() => client.zfs_pool_call(pool.path, "StopScrub", [{}])),
+        });
+    } else if (pool.ScrubRunning && pool.ScrubPaused) {
+        pool_actions.push({
+            title: _("Resume scrub"),
+            action: () => client.run(() => client.zfs_pool_call(pool.path, "ResumeScrub", [{}])),
+        });
+        pool_actions.push({
+            title: _("Stop scrub"),
+            action: () => client.run(() => client.zfs_pool_call(pool.path, "StopScrub", [{}])),
+        });
+    } else {
+        pool_actions.push({
+            title: _("Start scrub"),
+            action: () => client.run(() => client.zfs_pool_call(pool.path, "StartScrub", [{}])),
+        });
+    }
+
+    // Trim action
+    pool_actions.push({
+        title: _("Start trim"),
+        action: () => client.run(() => client.zfs_pool_call(pool.path, "StartTrim", [{}])),
+    });
+
+    pool_actions.push({
+        title: _("Export pool"),
+        action: () => export_zfs_pool(pool),
+    });
 
     // Add encryption key actions if pool has encryption info
     if (pool.Encryption && pool.Encryption !== "off") {
         if (pool.KeyLoaded) {
-            pool_actions.splice(pool_actions.length - 1, 0, {
+            pool_actions.push({
                 title: _("Unload encryption key"),
                 action: () => unload_zfs_key(pool),
             });
         } else {
-            pool_actions.splice(pool_actions.length - 1, 0, {
+            pool_actions.push({
                 title: _("Load encryption key"),
                 action: () => load_zfs_key(pool),
             });
         }
     }
+
+    pool_actions.push({
+        title: _("Destroy pool"),
+        action: () => destroy_zfs_pool(pool, pool_card),
+        danger: true,
+    });
 
     const pool_card = new_card({
         title: _("ZFS pool"),
@@ -81,16 +113,9 @@ export function make_zfs_pool_page(parent, pool) {
         props: { pool },
     });
 
-    const scrub_card = new_card({
-        title: _("ZFS scrub"),
-        next: vdev_card,
-        component: ZFSScrubCard,
-        props: { pool },
-    });
-
     const datasets_card = new_card({
         title: _("ZFS pool"),
-        next: scrub_card,
+        next: vdev_card,
         component: ZFSDatasetsCard,
         props: { pool },
         actions: [
@@ -119,12 +144,24 @@ const ZFSPoolCard = ({ card, pool, use }) => {
 
     const has_encryption = pool.Encryption && pool.Encryption !== "off";
 
+    // Scrub status
+    let scrub_status;
+    if (pool.ScrubRunning && !pool.ScrubPaused) {
+        scrub_status = cockpit.format(_("Running ($0%)"), (pool.ScrubProgress * 100).toFixed(1));
+    } else if (pool.ScrubRunning && pool.ScrubPaused) {
+        scrub_status = cockpit.format(_("Paused ($0%)"), (pool.ScrubProgress * 100).toFixed(1));
+    } else if (pool.ScrubErrors > 0) {
+        scrub_status = cockpit.format(_("$0 errors found"), pool.ScrubErrors);
+    } else {
+        scrub_status = null;
+    }
+
     return (
         <StorageCard card={card}>
             <CardBody>
                 <DescriptionList className="pf-m-horizontal-on-sm">
                     <StorageDescription title={_("Name")} value={pool.Name} />
-                    <StorageDescription title={_("GUID")} value={pool.GUID} />
+                    <StorageDescription title={_("GUID")} value={formatPoolGuid(pool.GUID)} />
                     <StorageDescription title={_("State")}>
                         <Flex spaceItems={{ default: 'spaceItemsSm' }}>
                             <FlexItem>
@@ -157,6 +194,9 @@ const ZFSPoolCard = ({ card, pool, use }) => {
                             </FlexItem>
                         </Flex>
                     </StorageDescription>
+                    }
+                    { scrub_status &&
+                    <StorageDescription title={_("Scrub status")} value={scrub_status} />
                     }
                 </DescriptionList>
             </CardBody>
