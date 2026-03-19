@@ -296,3 +296,39 @@ td.job-action {
 .pf-v6-c-button .pf-v6-c-truncate span {
     text-decoration: var(--pf-v6-c-button--TextDecorationLine) var(--pf-v6-c-button--TextDecorationStyle);
 }
+
+// ZFS state indicator colors — used for pool/vdev state dots and text
+.zfs-state--online {
+  color: var(--pf-t--global--color--status--success--default);
+}
+
+.zfs-state--degraded {
+  color: var(--pf-t--global--color--status--warning--default);
+}
+
+.zfs-state--faulted {
+  color: var(--pf-t--global--color--status--danger--default);
+}
+
+.zfs-state--offline {
+  color: var(--pf-t--global--text--color--subtle);
+}
+
+// ZFS vdev tree indentation via CSS custom property
+.zfs-vdev-indent {
+  padding-inline-start: calc(var(--pf-t--global--spacer--lg) * var(--zfs-vdev-level, 0));
+}
+
+// ZFS vdev error highlight
+.zfs-vdev-error {
+  color: var(--pf-t--global--color--status--danger--default);
+}
+
+// ZFS properties / history dialog pre block
+.zfs-properties-pre {
+  white-space: pre-wrap;
+  max-block-size: 400px;
+  overflow: auto;
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: var(--pf-t--global--font--size--sm);
+}

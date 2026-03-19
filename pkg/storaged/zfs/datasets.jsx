@@ -14,7 +14,7 @@ import { Table, Thead, Tbody, Tr, Th, Td } from '@patternfly/react-table';
 import { EmptyState, EmptyStateBody } from "@patternfly/react-core/dist/esm/components/EmptyState/index.js";
 import { Alert } from "@patternfly/react-core/dist/esm/components/Alert/index.js";
 import { Spinner } from "@patternfly/react-core/dist/esm/components/Spinner/index.js";
-import { Badge } from "@patternfly/react-core/dist/esm/components/Badge/index.js";
+import { Label } from "@patternfly/react-core/dist/esm/components/Label/index.js";
 
 import { InputGroup, InputGroupItem, InputGroupText } from "@patternfly/react-core/dist/esm/components/InputGroup/index.js";
 import { TextInput as TextInputPF } from "@patternfly/react-core/dist/esm/components/TextInput/index.js";
@@ -22,7 +22,7 @@ import { HelperText, HelperTextItem } from "@patternfly/react-core/dist/esm/comp
 
 import { StorageCard } from "../pages.jsx";
 import { StorageBarMenu, StorageMenuItem } from "../storage-controls.jsx";
-import { dialog_open, TextInput, SelectOne } from "../dialog.jsx";
+import { dialog_open, TextInput, SizeSlider, SelectOne } from "../dialog.jsx";
 import { fmt_size } from "../utils.js";
 import {
     promote_clone, hold_snapshot, release_snapshot,
@@ -108,6 +108,9 @@ export function create_filesystem(pool_path, pool_name) {
 }
 
 export function create_volume(pool_path, pool_name) {
+    const pool = client.zfs_pools[pool_path];
+    const max_size = pool ? Number(pool.Free) : undefined;
+
     dialog_open({
         Title: cockpit.format(_("Create ZFS volume on $0"), pool_name),
         Fields: [
@@ -122,19 +125,15 @@ export function create_volume(pool_path, pool_name) {
                     return null;
                 }
             }),
-            TextInput("size", _("Size (bytes)"), {
-                validate: val => {
-                    const n = Number(val);
-                    if (isNaN(n) || n <= 0)
-                        return _("Size must be a positive number");
-                    return null;
-                }
+            SizeSlider("size", _("Size"), {
+                max: max_size,
+                round: 512,
             }),
         ],
         Action: {
             Title: _("Create"),
             action: async function (vals) {
-                await client.zfs_pool_call(pool_path, "CreateVolume", [vals.name, Number(vals.size), {}]);
+                await client.zfs_pool_call(pool_path, "CreateVolume", [vals.name, vals.size, {}]);
             }
         }
     });
@@ -313,7 +312,7 @@ function type_label(type) {
     }
 }
 
-function type_badge_color(type) {
+function type_label_color(type) {
     switch (type) {
     case "filesystem": return "blue";
     case "volume": return "cyan";
@@ -339,7 +338,6 @@ export const ZFSDatasetsCard = ({ card, pool }) => {
                     setError(null);
                 })
                 .catch(err => {
-                    console.warn("ListDatasets failed:", err);
                     setError(err.toString());
                 });
     }, [pool_path]);
@@ -510,10 +508,9 @@ export const ZFSDatasetsCard = ({ card, pool }) => {
                                 <Tr key={d.name}>
                                     <Td>{d.name}</Td>
                                     <Td>
-                                        <Badge screenReaderText={type_label(d.type)}
-                                               style={{ backgroundColor: type_badge_color(d.type) }}>
+                                        <Label isCompact color={type_label_color(d.type)}>
                                             {type_label(d.type)}
-                                        </Badge>
+                                        </Label>
                                     </Td>
                                     <Td>{d.mountpoint}</Td>
                                     <Td>{d.type === "filesystem" ? (d.mounted ? _("Yes") : _("No")) : "-"}</Td>

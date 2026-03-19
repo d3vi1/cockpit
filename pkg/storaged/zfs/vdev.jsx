@@ -8,14 +8,14 @@ import React, { useState, useEffect, useCallback } from "react";
 import client from "../client";
 
 import { CardBody } from "@patternfly/react-core/dist/esm/components/Card/index.js";
-import { Badge } from "@patternfly/react-core/dist/esm/components/Badge/index.js";
+import { Label } from "@patternfly/react-core/dist/esm/components/Label/index.js";
 import { EmptyState, EmptyStateBody } from "@patternfly/react-core/dist/esm/components/EmptyState/index.js";
 import { Spinner } from "@patternfly/react-core/dist/esm/components/Spinner/index.js";
 import { Alert } from "@patternfly/react-core/dist/esm/components/Alert/index.js";
 import { Table, Thead, Tbody, Tr, Th, Td } from '@patternfly/react-table';
 import { StorageCard } from "../pages.jsx";
 import { StorageBarMenu, StorageMenuItem } from "../storage-controls.jsx";
-import { zfs_pool_state_color, fmt_zfs_state } from "./utils.jsx";
+import { zfs_state_css_class, fmt_zfs_state } from "./utils.jsx";
 import {
     replace_zfs_vdev, attach_zfs_vdev, detach_zfs_vdev,
     online_zfs_vdev, offline_zfs_vdev,
@@ -131,37 +131,35 @@ function vdev_actions_menu(pool, vdev, parent_vdev) {
 }
 
 function renderVdev(pool, vdev, depth, key_prefix, parent_vdev) {
-    const indent = depth * 24;
-    const state_color = zfs_pool_state_color(vdev.state);
+    const state_css = zfs_state_css_class(vdev.state);
     const state_text = fmt_zfs_state(vdev.state);
     const display_name = vdev.path || vdev_type_label(vdev.type) || _("Unknown device");
     const has_errors = vdev.read_errors > 0 || vdev.write_errors > 0 || vdev.checksum_errors > 0;
+    const error_class = has_errors ? "zfs-vdev-error" : undefined;
 
     const rows = [];
     rows.push(
         <Tr key={key_prefix}>
-            <Td style={{ paddingLeft: indent + "px" }}>
+            <Td className="zfs-vdev-indent" style={{ "--zfs-vdev-level": depth }}>
                 {depth === 0 && vdev.type &&
-                    <Badge isRead style={{ marginRight: "8px" }}>
-                        {vdev_type_label(vdev.type)}
-                    </Badge>
+                    <Label className="pf-v6-u-mr-sm" isCompact>{vdev_type_label(vdev.type)}</Label>
                 }
-                <span style={{ fontWeight: depth === 0 ? "bold" : "normal" }}>
+                <span className={depth === 0 ? "pf-v6-u-font-weight-bold" : undefined}>
                     {depth === 0 ? (vdev.path || vdev_type_label(vdev.type) || _("Unknown device")) : display_name}
                 </span>
             </Td>
             <Td>
-                <span style={{ color: state_color }}>
+                <span className={"zfs-state-text " + state_css}>
                     {state_text}
                 </span>
             </Td>
-            <Td style={has_errors ? { color: "var(--pf-t--global--color--status--danger--default)" } : {}}>
+            <Td className={error_class}>
                 {vdev.read_errors}
             </Td>
-            <Td style={has_errors ? { color: "var(--pf-t--global--color--status--danger--default)" } : {}}>
+            <Td className={error_class}>
                 {vdev.write_errors}
             </Td>
-            <Td style={has_errors ? { color: "var(--pf-t--global--color--status--danger--default)" } : {}}>
+            <Td className={error_class}>
                 {vdev.checksum_errors}
             </Td>
             <Td isActionCell>
@@ -194,7 +192,6 @@ export const ZFSVdevCard = ({ card, pool }) => {
                     setError(null);
                 })
                 .catch(err => {
-                    console.warn("GetVdevTopology failed:", err);
                     setError(err.toString());
                 });
     }, [pool_path]);
