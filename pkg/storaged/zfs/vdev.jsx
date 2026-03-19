@@ -23,22 +23,32 @@ import {
 
 const _ = cockpit.gettext;
 
+/* Unwrap D-Bus variant values: Cockpit's D-Bus client may deliver
+ * a{sv} dictionary entries as either raw values or {v: <value>}
+ * wrappers depending on the nesting level.  This helper normalises
+ * both forms so callers can always work with the plain value. */
+function unwrap(val) {
+    if (val && typeof val === 'object' && 'v' in val)
+        return val.v;
+    return val;
+}
+
 function parse_vdev(v) {
     if (!v || typeof v !== 'object')
         return { path: "", type: "", state: "UNKNOWN", read_errors: 0, write_errors: 0, checksum_errors: 0, children: null };
 
-    const raw_children = v.children?.v;
+    const raw_children = unwrap(v.children);
     let children = null;
     if (Array.isArray(raw_children) && raw_children.length > 0)
         children = raw_children.filter(c => c != null).map(parse_vdev);
 
     return {
-        path: v.path?.v || "",
-        type: v.type?.v || "",
-        state: v.state?.v || "UNKNOWN",
-        read_errors: Number(v.read_errors?.v) || 0,
-        write_errors: Number(v.write_errors?.v) || 0,
-        checksum_errors: Number(v.checksum_errors?.v) || 0,
+        path: unwrap(v.path) || "",
+        type: unwrap(v.type) || "",
+        state: unwrap(v.state) || "UNKNOWN",
+        read_errors: Number(unwrap(v.read_errors)) || 0,
+        write_errors: Number(unwrap(v.write_errors)) || 0,
+        checksum_errors: Number(unwrap(v.checksum_errors)) || 0,
         children: (children && children.length > 0) ? children : null,
     };
 }
@@ -50,6 +60,7 @@ function vdev_type_label(type) {
     case "raidz1": return _("RAIDZ1");
     case "raidz2": return _("RAIDZ2");
     case "raidz3": return _("RAIDZ3");
+    case "draid": return _("dRAID");
     case "spare": return _("Spare");
     case "cache": return _("Cache");
     case "log": return _("Log");
@@ -62,17 +73,20 @@ function vdev_type_label(type) {
 /* Special vdev classes where mirror-attach is not applicable */
 const SPECIAL_VDEV_CLASSES = new Set(["spare", "cache"]);
 
-/* RAIDZ vdev types — members cannot be individually attached/detached */
-const RAIDZ_TYPES = new Set(["raidz", "raidz1", "raidz2", "raidz3"]);
+/* Parity-group vdev types — members cannot be individually attached/detached */
+const PARITY_GROUP_TYPES = new Set(["raidz", "raidz1", "raidz2", "raidz3", "draid"]);
 
 function vdev_actions_menu(pool, vdev, parent_vdev) {
-    // Only show actions for leaf devices (those with a path / actual disk)
-    if (!vdev.path)
+    // Only show actions for actual leaf devices — nodes that represent a
+    // physical disk/file and have no children.  Aggregate nodes (mirror-0,
+    // raidz1-0, etc.) carry a truthy `path` token but are not actionable.
+    const is_leaf = !vdev.children || vdev.children.length === 0;
+    if (!is_leaf || !vdev.path)
         return null;
 
     const parent_type = parent_vdev?.type || "";
     const is_in_mirror = parent_type === "mirror";
-    const is_in_raidz = RAIDZ_TYPES.has(parent_type);
+    const is_in_parity_group = PARITY_GROUP_TYPES.has(parent_type);
     const is_in_special_class = SPECIAL_VDEV_CLASSES.has(parent_type);
     const is_spare = parent_type === "spare";
     const is_offline = vdev.state === "OFFLINE";
@@ -105,8 +119,8 @@ function vdev_actions_menu(pool, vdev, parent_vdev) {
         </StorageMenuItem>
     );
 
-    // Attach mirror: not applicable in spare/cache vdev classes or inside raidz groups
-    if (!is_in_special_class && !is_in_raidz) {
+    // Attach mirror: not applicable in spare/cache vdev classes or inside parity groups
+    if (!is_in_special_class && !is_in_parity_group) {
         items.push(
             <StorageMenuItem key="attach"
                              onClick={() => attach_zfs_vdev(pool, vdev.path)}>
@@ -133,7 +147,12 @@ function vdev_actions_menu(pool, vdev, parent_vdev) {
 function renderVdev(pool, vdev, depth, key_prefix, parent_vdev) {
     const state_css = zfs_state_css_class(vdev.state);
     const state_text = fmt_zfs_state(vdev.state);
-    const display_name = vdev.path || vdev_type_label(vdev.type) || _("Unknown device");
+    const is_aggregate = vdev.children && vdev.children.length > 0;
+    // Aggregate rows (mirror-0, raidz1-0, etc.) show the human-readable type
+    // label; leaf rows show the device path.
+    const display_name = is_aggregate
+        ? vdev_type_label(vdev.type) || vdev.path || _("Unknown device")
+        : vdev.path || vdev_type_label(vdev.type) || _("Unknown device");
     const has_errors = vdev.read_errors > 0 || vdev.write_errors > 0 || vdev.checksum_errors > 0;
     const error_class = has_errors ? "zfs-vdev-error" : undefined;
 
@@ -145,7 +164,7 @@ function renderVdev(pool, vdev, depth, key_prefix, parent_vdev) {
                     <Label className="pf-v6-u-mr-sm" isCompact>{vdev_type_label(vdev.type)}</Label>
                 }
                 <span className={depth === 0 ? "pf-v6-u-font-weight-bold" : undefined}>
-                    {depth === 0 ? (vdev.path || vdev_type_label(vdev.type) || _("Unknown device")) : display_name}
+                    {display_name}
                 </span>
             </Td>
             <Td>
