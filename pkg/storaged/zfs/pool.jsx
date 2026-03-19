@@ -24,7 +24,7 @@ import { ZFSDatasetsCard, create_filesystem, create_volume, create_snapshot } fr
 import { ZFSVdevCard } from "./vdev.jsx";
 import {
     export_zfs_pool, destroy_zfs_pool,
-    stop_trim_zfs_pool, clear_errors_zfs_pool, upgrade_zfs_pool,
+    clear_errors_zfs_pool, upgrade_zfs_pool,
     view_history_zfs_pool, view_edit_pool_properties, add_vdev_to_pool,
 } from "./dialogs.jsx";
 
@@ -61,28 +61,23 @@ export function make_zfs_pool_page(parent, pool) {
         });
     }
 
-    // Trim actions — only show when the pool has trim capability.
+    // Trim actions — only show when the pool explicitly has trim capability.
     // FeatureFlags is an "as" property listing enabled feature flags.
-    // Pools that support TRIM typically have "device_trim" or were created
-    // with a version that includes it.  We also check for the "allocation_classes"
-    // flag as a secondary indicator.  If FeatureFlags is empty or missing,
-    // assume TRIM is available (the backend will error if not supported).
+    // Fail-closed: if FeatureFlags is missing or empty, don't offer trim
+    // (the backend may not have populated them yet).
     const feature_flags = pool.FeatureFlags || [];
-    const has_trim_feature = feature_flags.length === 0 ||
-                             feature_flags.some(f => f.indexOf("trim") >= 0 ||
-                                                     f.indexOf("allocation_classes") >= 0);
+    const has_trim_feature = feature_flags.length > 0 &&
+                             feature_flags.some(f => f.indexOf("trim") >= 0);
     if (has_trim_feature) {
-        // Disable "Start trim" while a scrub is running — these compete for I/O
+        // No TrimRunning property is available from the backend yet,
+        // so we can only offer "Start trim" (never "Stop trim").
+        // Disable while a scrub is running — these compete for I/O.
         if (!pool.ScrubRunning) {
             pool_actions.push({
                 title: _("Start trim"),
                 action: () => client.run(() => client.zfs_pool_call(pool.path, "TrimStart", [{}])),
             });
         }
-        pool_actions.push({
-            title: _("Stop trim"),
-            action: () => stop_trim_zfs_pool(pool),
-        });
     }
 
     // Pool management actions
