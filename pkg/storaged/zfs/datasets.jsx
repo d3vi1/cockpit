@@ -198,14 +198,22 @@ export function create_snapshot(pool_path, pool_name) {
 /* ---- internal helpers ---- */
 
 function destroy_dataset(pool_path, dataset_name, dataset_type) {
-    const label = dataset_type === "snapshot" ? _("snapshot") : _("dataset");
+    const type_labels = {
+        snapshot: _("snapshot"),
+        bookmark: _("bookmark"),
+    };
+    const label = type_labels[dataset_type] || _("dataset");
+
     dialog_open({
         Title: cockpit.format(_("Permanently destroy $0 $1?"), label, dataset_name),
         Action: {
             Title: _("Destroy"),
             Danger: cockpit.format(_("Destroying a $0 will permanently delete all data it contains. This action cannot be undone."), label),
             action: async function () {
-                await client.zfs_pool_call(pool_path, "DestroyDataset", [dataset_name, false, {}]);
+                if (dataset_type === "bookmark")
+                    await client.zfs_pool_call(pool_path, "DestroyBookmark", [dataset_name, {}]);
+                else
+                    await client.zfs_pool_call(pool_path, "DestroyDataset", [dataset_name, false, {}]);
             }
         }
     });
