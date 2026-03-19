@@ -1,0 +1,343 @@
+#!/usr/bin/python3 -cimport os, sys; os.execv(os.path.dirname(sys.argv[1]) + "/../common/pywrap", sys.argv)
+
+#
+# Copyright (C) 2024 Red Hat, Inc.
+# SPDX-License-Identifier: LGPL-2.1-or-later
+
+
+import storagelib
+import testlib
+
+
+def zfs_available(machine):
+    """Check whether ZFS kernel module and userspace tools are present."""
+    try:
+        machine.execute("modprobe zfs && which zpool && which zfs")
+        return True
+    except Exception:
+        return False
+
+
+def zfs_udisks_module_available(machine):
+    """Check whether the UDisks2 ZFS module can be enabled."""
+    try:
+        machine.execute(
+            "busctl call org.freedesktop.UDisks2 "
+            "/org/freedesktop/UDisks2/Manager "
+            "org.freedesktop.UDisks2.Manager "
+            "EnableModule sb zfs true"
+        )
+        return True
+    except Exception:
+        return False
+
+
+@testlib.nondestructive
+class TestStorageZFS(storagelib.StorageCase):
+    """Browser tests for the ZFS pool management UI.
+
+    These tests require ZFS kernel modules, ZFS userspace tools, and the
+    UDisks2 ZFS module.  When any of these are unavailable the entire
+    test class is skipped at setUp() time so that CI environments
+    without ZFS support do not fail.
+    """
+
+    def setUp(self):
+        super().setUp()
+        m = self.machine
+
+        if not zfs_available(m):
+            self.skipTest("ZFS kernel module or userspace tools not available")
+
+        if not zfs_udisks_module_available(m):
+            self.skipTest("UDisks2 ZFS module not available")
+
+        # Allow expected browser errors from the ZFS UI
+        self.allow_browser_errors("Failed to load datasets.*")
+        self.allow_browser_errors("Failed to load vdev topology.*")
+
+        # Clean up any pools we create during the test
+        self.addCleanup(m.execute,
+                        "for p in $(zpool list -H -o name 2>/dev/null | "
+                        "grep '^testpool'); do zpool destroy -f $p; done")
+
+    def _create_pool(self, name="testpool0", size=200):
+        """Create a ZFS pool on a loopback device for testing.
+
+        Returns the device name.
+        """
+        m = self.machine
+        dev = self.add_loopback_disk(size=size)
+        m.execute(f"zpool create -f {name} {dev}")
+        return dev
+
+    # ---- Pool page rendering ----
+
+    def testPoolPageRenders(self):
+        """Verify that a ZFS pool appears on the Storage overview and
+        that navigating to its detail page shows the expected cards."""
+        b = self.browser
+
+        self._create_pool("testpool0")
+
+        self.login_and_go("/storage")
+
+        # The pool should appear on the overview page
+        with b.wait_timeout(30):
+            b.wait_visible(self.card_row("Storage", name="testpool0"))
+
+        # Navigate to pool detail
+        self.click_card_row("Storage", name="testpool0")
+
+        # The ZFS pool card should be present with basic metadata
+        b.wait_visible(self.card("ZFS pool"))
+        b.wait_in_text(self.card_desc("ZFS pool", "Name"), "testpool0")
+        b.wait_in_text(self.card_desc("ZFS pool", "State"), "Online")
+        b.wait_in_text(self.card_desc("ZFS pool", "Health"), "Online")
+        b.wait_in_text(self.card_desc("ZFS pool", "Read only"), "No")
+
+        # The vdev topology card should be present
+        b.wait_visible(self.card("ZFS vdev topology"))
+
+    # ---- Import dialog ----
+
+    def testImportDialog(self):
+        """Verify that the Import ZFS pool action opens a dialog."""
+        self.login_and_go("/storage")
+
+        # Open the "Create storage device" dropdown and click "Import ZFS pool"
+        self.click_devices_dropdown("Import ZFS pool")
+
+        # A dialog should open.  Since no pools are exported, it should
+        # either show the import dialog with no pools or a text input fallback.
+        self.dialog_wait_open()
+        # The dialog title should mention "Import ZFS pool"
+        self.dialog_wait_title("Import ZFS pool")
+        self.dialog_cancel()
+        self.dialog_wait_close()
+
+    # ---- Create pool dialog ----
+
+    def testCreatePoolDialog(self):
+        """Verify that the Create ZFS pool action opens a dialog with
+        the expected fields."""
+        b = self.browser
+
+        # Add a disk so the dialog has something to show
+        dev = self.add_loopback_disk(size=200)
+
+        self.login_and_go("/storage")
+
+        with b.wait_timeout(30):
+            b.wait_visible(self.card_row("Storage", name=dev))
+
+        # Open the "Create storage device" dropdown and click "Create ZFS pool"
+        self.click_devices_dropdown("Create ZFS pool")
+
+        self.dialog_wait_open()
+        self.dialog_wait_title("Create ZFS pool")
+
+        # The name field should have a default value
+        name_val = self.dialog_val("name")
+        self.assertTrue(
+            name_val.startswith("zpool"),
+            f"Expected default name starting with 'zpool', got '{name_val}'"
+        )
+
+        # The vdev_type field should be present
+        b.wait_visible(self.dialog_field("vdev_type"))
+
+        # The disks field should be present
+        b.wait_visible(self.dialog_field("disks"))
+
+        # Validate that empty name is rejected
+        self.dialog_set_val("name", "")
+        self.dialog_apply()
+        self.dialog_wait_error("name", "Name is required")
+
+        self.dialog_cancel()
+        self.dialog_wait_close()
+
+    # ---- Destroy confirmation ----
+
+    def testDestroyConfirmation(self):
+        """Verify that destroying a pool requires typing the pool name
+        as confirmation."""
+        m = self.machine
+        b = self.browser
+
+        self._create_pool("testpool0")
+
+        self.login_and_go("/storage")
+
+        with b.wait_timeout(30):
+            b.wait_visible(self.card_row("Storage", name="testpool0"))
+
+        self.click_card_row("Storage", name="testpool0")
+        b.wait_visible(self.card("ZFS pool"))
+
+        # Open the pool kebab menu and click Destroy pool
+        self.click_card_dropdown("ZFS pool", "Destroy pool")
+
+        self.dialog_wait_open()
+        self.dialog_wait_title("Permanently destroy pool testpool0?")
+
+        # Without typing the pool name, the validation should prevent apply
+        self.dialog_set_val("confirm", "wrong-name")
+        self.dialog_apply()
+        self.dialog_wait_error("confirm", "Pool name does not match")
+
+        # Type the correct name and destroy
+        self.dialog_set_val("confirm", "testpool0")
+        self.dialog_apply()
+        self.dialog_wait_close()
+
+        # Should be back on the overview, pool should be gone
+        b.wait_visible(self.card("Storage"))
+        b.wait_not_present(self.card_row("Storage", name="testpool0"))
+
+        # Verify pool is actually gone
+        m.execute("! zpool list testpool0 2>/dev/null")
+
+    # ---- Export pool ----
+
+    def testExportPool(self):
+        """Verify that exporting a pool removes it from the UI and makes
+        it importable again."""
+        m = self.machine
+        b = self.browser
+
+        self._create_pool("testpool0")
+
+        self.login_and_go("/storage")
+
+        with b.wait_timeout(30):
+            b.wait_visible(self.card_row("Storage", name="testpool0"))
+
+        self.click_card_row("Storage", name="testpool0")
+        b.wait_visible(self.card("ZFS pool"))
+
+        # Export the pool
+        self.click_card_dropdown("ZFS pool", "Export pool")
+
+        self.dialog_wait_open()
+        self.dialog_wait_title("Export pool testpool0?")
+        self.dialog_apply()
+        self.dialog_wait_close()
+
+        # Should be back on the overview, pool should be gone
+        b.wait_visible(self.card("Storage"))
+        b.wait_not_present(self.card_row("Storage", name="testpool0"))
+
+        # Verify pool is exported (listed as importable)
+        m.execute("zpool import | grep testpool0")
+
+    # ---- Trim capability gating ----
+
+    def testTrimCapabilityGating(self):
+        """Verify that the Trim action is not shown when the pool does
+        not have the trim feature flag enabled."""
+        m = self.machine
+        b = self.browser
+
+        # Create a pool; loopback devices may or may not have trim.
+        # The UI should respect the FeatureFlags property from UDisks.
+        self._create_pool("testpool0")
+
+        self.login_and_go("/storage")
+
+        with b.wait_timeout(30):
+            b.wait_visible(self.card_row("Storage", name="testpool0"))
+
+        self.click_card_row("Storage", name="testpool0")
+        b.wait_visible(self.card("ZFS pool"))
+
+        # Open the pool actions dropdown
+        b.click(self.dropdown_toggle(self.card_header("ZFS pool")))
+
+        # The "Start scrub" action should always be present
+        b.wait_visible(self.dropdown_action("Start scrub"))
+
+        # Check whether "Start trim" is correctly gated by feature flags.
+        # The frontend checks pool.FeatureFlags for any entry containing
+        # "trim".  We mirror that check from the machine side by looking
+        # at zpool feature flags that contain "trim".
+        trim_out = m.execute(
+            "zpool get all testpool0 2>/dev/null "
+            "| grep 'feature.*trim' || true"
+        )
+        has_trim = "trim" in trim_out
+
+        # The trim action check: if the pool has trim features, it should
+        # be present; if not, it should be absent.  This validates the
+        # fail-closed design in pool.jsx.
+        if has_trim:
+            b.wait_visible(self.dropdown_action("Start trim"))
+        else:
+            b.wait_not_present(self.dropdown_action("Start trim"))
+
+        # Close the dropdown
+        b.click(self.dropdown_toggle(self.card_header("ZFS pool")))
+
+    # ---- Pool actions menu completeness ----
+
+    def testPoolActionsMenu(self):
+        """Verify that the pool actions dropdown contains all expected items."""
+        b = self.browser
+
+        self._create_pool("testpool0")
+
+        self.login_and_go("/storage")
+
+        with b.wait_timeout(30):
+            b.wait_visible(self.card_row("Storage", name="testpool0"))
+
+        self.click_card_row("Storage", name="testpool0")
+        b.wait_visible(self.card("ZFS pool"))
+
+        # Open the pool actions dropdown
+        b.click(self.dropdown_toggle(self.card_header("ZFS pool")))
+
+        # Verify core actions are present
+        b.wait_visible(self.dropdown_action("Start scrub"))
+        b.wait_visible(self.dropdown_action("Clear errors"))
+        b.wait_visible(self.dropdown_action("View history"))
+        b.wait_visible(self.dropdown_action("View properties"))
+        b.wait_visible(self.dropdown_action("Add vdev"))
+        b.wait_visible(self.dropdown_action("Export pool"))
+        b.wait_visible(self.dropdown_action("Upgrade pool"))
+        b.wait_visible(self.dropdown_action("Destroy pool"))
+
+        # Close the dropdown
+        b.click(self.dropdown_toggle(self.card_header("ZFS pool")))
+
+    # ---- Dataset operations ----
+
+    def testCreateAndListDatasets(self):
+        """Verify creating a filesystem and seeing it in the datasets table."""
+        m = self.machine
+        b = self.browser
+
+        self._create_pool("testpool0")
+
+        self.login_and_go("/storage")
+
+        with b.wait_timeout(30):
+            b.wait_visible(self.card_row("Storage", name="testpool0"))
+
+        self.click_card_row("Storage", name="testpool0")
+        b.wait_visible(self.card("ZFS pool"))
+
+        # The datasets table should show the root dataset
+        b.wait_in_text(self.card("ZFS pool"), "testpool0")
+
+        # Create a filesystem via the CLI and verify it appears
+        m.execute("zfs create testpool0/myfs")
+
+        # The datasets table updates via D-Bus events; wait for it
+        with b.wait_timeout(30):
+            b.wait_in_text(self.card("ZFS pool"), "testpool0/myfs")
+
+
+if __name__ == '__main__':
+    testlib.test_main()
