@@ -62,15 +62,29 @@ export function make_zfs_pool_page(parent, pool) {
         });
     }
 
-    // Trim actions
-    pool_actions.push({
-        title: _("Start trim"),
-        action: () => client.run(() => client.zfs_pool_call(pool.path, "TrimStart", [{}])),
-    });
-    pool_actions.push({
-        title: _("Stop trim"),
-        action: () => stop_trim_zfs_pool(pool),
-    });
+    // Trim actions — only show when the pool has trim capability.
+    // FeatureFlags is an "as" property listing enabled feature flags.
+    // Pools that support TRIM typically have "device_trim" or were created
+    // with a version that includes it.  We also check for the "allocation_classes"
+    // flag as a secondary indicator.  If FeatureFlags is empty or missing,
+    // assume TRIM is available (the backend will error if not supported).
+    const feature_flags = pool.FeatureFlags || [];
+    const has_trim_feature = feature_flags.length === 0 ||
+                             feature_flags.some(f => f.indexOf("trim") >= 0 ||
+                                                     f.indexOf("allocation_classes") >= 0);
+    if (has_trim_feature) {
+        // Disable "Start trim" while a scrub is running — these compete for I/O
+        if (!pool.ScrubRunning) {
+            pool_actions.push({
+                title: _("Start trim"),
+                action: () => client.run(() => client.zfs_pool_call(pool.path, "TrimStart", [{}])),
+            });
+        }
+        pool_actions.push({
+            title: _("Stop trim"),
+            action: () => stop_trim_zfs_pool(pool),
+        });
+    }
 
     // Pool management actions
     pool_actions.push({

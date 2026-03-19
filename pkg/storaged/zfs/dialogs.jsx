@@ -156,6 +156,35 @@ function get_zfs_available_spaces() {
     }));
 }
 
+/* ---- Vdev layout validation ---- */
+
+/**
+ * Validate that the number of selected devices is sufficient for the chosen
+ * vdev layout.  Returns an error string or null.
+ */
+function validate_vdev_device_count(vdev_type, count) {
+    const min_devices = {
+        mirror: 2,
+        raidz: 3,
+        raidz2: 4,
+        raidz3: 5,
+    };
+    const min = min_devices[vdev_type];
+    if (min && count < min) {
+        const layout_names = {
+            mirror: _("Mirror"),
+            raidz: _("RAIDZ"),
+            raidz2: _("RAIDZ2"),
+            raidz3: _("RAIDZ3"),
+        };
+        return cockpit.format(
+            _("$0 requires at least $1 devices, but only $2 selected."),
+            layout_names[vdev_type], min, count
+        );
+    }
+    return null;
+}
+
 /* ---- Pool creation (Manager.ZFS method) ---- */
 
 export function create_zfs_pool() {
@@ -196,9 +225,10 @@ export function create_zfs_pool() {
             }),
             SelectSpaces("disks", _("Block devices"), {
                 empty_warning: _("No available block devices were found."),
-                validate: function (disks) {
+                validate: function (disks, vals) {
                     if (disks.length === 0)
                         return _("At least one block device is needed.");
+                    return validate_vdev_device_count(vals.vdev_type, disks.length);
                 },
                 spaces,
             }),
@@ -357,13 +387,19 @@ export function destroy_zfs_pool(pool, card) {
             TextInput("confirm", _("Confirm by typing pool name"), {
                 validate: val => val !== pool_name ? _("Pool name does not match") : null
             }),
+            CheckBoxes("options", _("Options"), {
+                fields: [
+                    { tag: "force", title: _("Force destroy (even if pool is in use)") },
+                ],
+            }),
         ],
         Action: {
             DangerButton: true,
             Danger: _("Destroying a ZFS pool will permanently erase all data it contains."),
             Title: _("Destroy"),
-            action: async function () {
-                await client.zfs_pool_call(pool.path, "Destroy", [true, {}]);
+            action: async function (vals) {
+                const force = !!(vals.options && vals.options.force);
+                await client.zfs_pool_call(pool.path, "Destroy", [force, {}]);
                 navigate_away_from_card(card);
             }
         }
@@ -698,11 +734,12 @@ export function inherit_property(pool_path, dataset_name) {
 
 /* ---- Volume: Resize ---- */
 
-export function resize_volume(pool_path, volume_name) {
+export function resize_volume(pool_path, volume_name, current_size) {
     dialog_open({
         Title: cockpit.format(_("Resize volume $0"), volume_name),
         Fields: [
             TextInput("new_size", _("New size (bytes)"), {
+                value: current_size ? current_size.toString() : "",
                 validate: val => {
                     const n = Number(val);
                     if (isNaN(n) || n <= 0)
@@ -710,11 +747,27 @@ export function resize_volume(pool_path, volume_name) {
                     return null;
                 }
             }),
+            CheckBoxes("options", _("Options"), {
+                fields: [
+                    { tag: "confirm_shrink", title: _("I understand that shrinking a volume may cause data loss") },
+                ],
+                visible: vals => {
+                    if (!current_size)
+                        return false;
+                    const n = Number(vals.new_size);
+                    return !isNaN(n) && n > 0 && n < current_size;
+                },
+            }),
         ],
         Action: {
             Title: _("Resize"),
             action: async function (vals) {
-                await client.zfs_pool_call(pool_path, "ResizeVolume", [volume_name, Number(vals.new_size), {}]);
+                const new_size = Number(vals.new_size);
+                if (current_size && new_size < current_size) {
+                    if (!(vals.options && vals.options.confirm_shrink))
+                        return Promise.reject({ options: _("You must confirm that you understand the risk of shrinking.") });
+                }
+                await client.zfs_pool_call(pool_path, "ResizeVolume", [volume_name, new_size, {}]);
             }
         }
     });
@@ -834,9 +887,10 @@ export function add_vdev_to_pool(pool) {
         Fields: [
             SelectSpaces("disks", _("Block devices"), {
                 empty_warning: _("No available block devices were found."),
-                validate: function (disks) {
+                validate: function (disks, vals) {
                     if (disks.length === 0)
                         return _("At least one block device is needed.");
+                    return validate_vdev_device_count(vals.vdev_type, disks.length);
                 },
                 spaces,
             }),

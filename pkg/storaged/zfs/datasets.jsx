@@ -145,8 +145,9 @@ export function create_snapshot(pool_path, pool_name) {
     client.zfs_pool_call(pool_path, "ListDatasets", [{ type: { t: 's', v: 'all' } }])
             .then(result => {
                 const parsed = result[0].map(parse_dataset);
-                const filesystem_datasets = parsed.filter(d => d.type === "filesystem");
-                if (filesystem_datasets.length === 0) {
+                // Both filesystems and volumes can be snapshotted
+                const snappable_datasets = parsed.filter(d => d.type === "filesystem" || d.type === "volume");
+                if (snappable_datasets.length === 0) {
                     dialog_open({
                         Title: _("No datasets"),
                         Body: _("There are no datasets available to snapshot."),
@@ -158,9 +159,11 @@ export function create_snapshot(pool_path, pool_name) {
                     Title: cockpit.format(_("Create ZFS snapshot on $0"), pool_name),
                     Fields: [
                         SelectOne("dataset", _("Dataset"), {
-                            choices: filesystem_datasets.map(d => ({
+                            choices: snappable_datasets.map(d => ({
                                 value: d.name,
-                                title: d.name,
+                                title: d.type === "volume"
+                                    ? cockpit.format("$0 ($1)", d.name, _("volume"))
+                                    : d.name,
                             })),
                         }),
                         TextInput("snap_name", _("Snapshot name"), {
@@ -388,6 +391,22 @@ export const ZFSDatasetsCard = ({ card, pool }) => {
             );
         }
 
+        // Bookmarks are read-only references — only properties and destroy are valid
+        if (d.type === "bookmark") {
+            return (
+                <StorageBarMenu label={_("Actions")} isKebab menuItems={[
+                    <StorageMenuItem key="properties"
+                                     onClick={() => view_edit_properties(pool_path, d.name)}>
+                        {_("Properties")}
+                    </StorageMenuItem>,
+                    <StorageMenuItem key="destroy" danger
+                                     onClick={() => destroy_dataset(pool_path, d.name, d.type)}>
+                        {_("Destroy")}
+                    </StorageMenuItem>,
+                ]} />
+            );
+        }
+
         const is_clone = d.origin && d.origin !== "-" && d.origin !== "";
 
         return (
@@ -412,7 +431,7 @@ export const ZFSDatasetsCard = ({ card, pool }) => {
                     : null,
                 d.type === "volume"
                     ? <StorageMenuItem key="resize"
-                                       onClick={() => resize_volume(pool_path, d.name)}>
+                                       onClick={() => resize_volume(pool_path, d.name, d.referenced)}>
                         {_("Resize")}
                     </StorageMenuItem>
                     : null,
