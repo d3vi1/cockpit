@@ -11,7 +11,7 @@ import {
     dialog_open, TextInput, SelectOne, SelectSpaces, PassInput, CheckBoxes,
 } from "../dialog.jsx";
 import {
-    decode_filename, block_name, drive_name, fmt_size, block_cmp,
+    block_name, drive_name, fmt_size, block_cmp,
 } from "../utils.js";
 import { navigate_away_from_card } from "../pages.jsx";
 
@@ -215,7 +215,12 @@ export function create_zfs_pool() {
         Action: {
             Title: _("Create"),
             action: function (vals) {
-                const devs = vals.disks.map(spc => decode_filename(spc.block.PreferredDevice));
+                // D-Bus PoolCreate expects "ao" (array of object paths), not device
+                // paths.  The UDisks handler resolves object paths to /dev/ paths
+                // internally via resolve_blocks_to_device_paths().
+                const devs = vals.disks.map(spc => spc.block.path);
+                // vdev_type "" (stripe) is valid D-Bus wire value; the UDisks handler
+                // normalizes "" to NULL before passing to libblockdev.
                 return client.zfs_manager.PoolCreate(vals.name, devs, vals.vdev_type, {});
             }
         }
@@ -294,10 +299,22 @@ export function import_zfs_pool() {
                     return;
                 }
 
-                const choices = pools.map(p => ({
-                    value: p.name,
-                    title: cockpit.format("$0 (GUID $1, $2)", p.name, p.guid, p.state),
-                }));
+                // Build a lookup from GUID to pool name so we can pass
+                // the pool name in options for the wait_for_pool_object
+                // lookup (which is keyed by name, not GUID).
+                const guid_to_name = {};
+                const choices = pools.map(p => {
+                    // Prefer GUID as the import identifier: it is
+                    // unambiguous even when two pools share the same name
+                    // (e.g. after a split).  Fall back to name if GUID is
+                    // unavailable.
+                    const id = p.guid || p.name;
+                    guid_to_name[id] = p.name;
+                    return {
+                        value: id,
+                        title: cockpit.format("$0 (GUID $1, $2)", p.name, p.guid, p.state),
+                    };
+                });
 
                 dialog_open({
                     Title: _("Import ZFS pool"),
@@ -315,6 +332,12 @@ export function import_zfs_pool() {
                             const options = {};
                             if (vals.options && vals.options.force)
                                 options.force = { t: 'b', v: true };
+                            // When importing by GUID, pass the pool name so
+                            // the UDisks handler can locate the pool object
+                            // (pool objects are keyed by name, not GUID).
+                            const pool_name = guid_to_name[vals.pool];
+                            if (pool_name && vals.pool !== pool_name)
+                                options.new_name = { t: 's', v: pool_name };
                             await client.zfs_manager.PoolImport(vals.pool, options);
                         }
                     }
@@ -849,20 +872,19 @@ export function add_vdev_to_pool(pool) {
                     { value: "raidz3", title: _("RAIDZ3") },
                 ],
             }),
-            CheckBoxes("options", _("Options"), {
-                fields: [
-                    { tag: "force", title: _("Force (allow mismatched vdev topology)") },
-                ],
-            }),
+            // Note: no Force checkbox here.  The AddVdev D-Bus handler does
+            // not extract a "force" option, so showing the checkbox would
+            // silently discard the user's choice.  Force-add support can be
+            // added once the UDisks handler wires it through.
         ],
         Action: {
             Title: _("Add vdev"),
             action: async function (vals) {
+                // D-Bus AddVdev expects "ao" (array of object paths); the
+                // UDisks handler resolves them to /dev/ paths internally.
+                // vdev_type "" (stripe) is normalized to NULL server-side.
                 const block_paths = vals.disks.map(spc => spc.block.path);
-                const options = {};
-                if (vals.options && vals.options.force)
-                    options.force = { t: 'b', v: true };
-                await client.zfs_pool_call(pool.path, "AddVdev", [vals.vdev_type, block_paths, options]);
+                await client.zfs_pool_call(pool.path, "AddVdev", [vals.vdev_type, block_paths, {}]);
             }
         }
     });
