@@ -24,14 +24,22 @@ import {
 const _ = cockpit.gettext;
 
 function parse_vdev(v) {
+    if (!v || typeof v !== 'object')
+        return { path: "", type: "", state: "UNKNOWN", read_errors: 0, write_errors: 0, checksum_errors: 0, children: null };
+
+    const raw_children = v.children?.v;
+    let children = null;
+    if (Array.isArray(raw_children) && raw_children.length > 0)
+        children = raw_children.filter(c => c != null).map(parse_vdev);
+
     return {
         path: v.path?.v || "",
         type: v.type?.v || "",
         state: v.state?.v || "UNKNOWN",
-        read_errors: Number(v.read_errors?.v || 0),
-        write_errors: Number(v.write_errors?.v || 0),
-        checksum_errors: Number(v.checksum_errors?.v || 0),
-        children: v.children?.v ? v.children.v.map(parse_vdev) : null,
+        read_errors: Number(v.read_errors?.v) || 0,
+        write_errors: Number(v.write_errors?.v) || 0,
+        checksum_errors: Number(v.checksum_errors?.v) || 0,
+        children: (children && children.length > 0) ? children : null,
     };
 }
 
@@ -51,30 +59,43 @@ function vdev_type_label(type) {
     }
 }
 
+/* Special vdev classes where mirror-attach is not applicable */
+const SPECIAL_VDEV_CLASSES = new Set(["spare", "cache"]);
+
+/* RAIDZ vdev types — members cannot be individually attached/detached */
+const RAIDZ_TYPES = new Set(["raidz", "raidz1", "raidz2", "raidz3"]);
+
 function vdev_actions_menu(pool, vdev, parent_vdev) {
     // Only show actions for leaf devices (those with a path / actual disk)
     if (!vdev.path)
         return null;
 
-    const is_in_mirror = parent_vdev && parent_vdev.type === "mirror";
+    const parent_type = parent_vdev?.type || "";
+    const is_in_mirror = parent_type === "mirror";
+    const is_in_raidz = RAIDZ_TYPES.has(parent_type);
+    const is_in_special_class = SPECIAL_VDEV_CLASSES.has(parent_type);
+    const is_spare = parent_type === "spare";
     const is_offline = vdev.state === "OFFLINE";
 
     const items = [];
 
-    if (is_offline) {
-        items.push(
-            <StorageMenuItem key="online"
-                             onClick={() => online_zfs_vdev(pool, vdev.path)}>
-                {_("Online")}
-            </StorageMenuItem>
-        );
-    } else {
-        items.push(
-            <StorageMenuItem key="offline"
-                             onClick={() => offline_zfs_vdev(pool, vdev.path)}>
-                {_("Offline")}
-            </StorageMenuItem>
-        );
+    // Spares are passive — no online/offline toggling
+    if (!is_spare) {
+        if (is_offline) {
+            items.push(
+                <StorageMenuItem key="online"
+                                 onClick={() => online_zfs_vdev(pool, vdev.path)}>
+                    {_("Online")}
+                </StorageMenuItem>
+            );
+        } else {
+            items.push(
+                <StorageMenuItem key="offline"
+                                 onClick={() => offline_zfs_vdev(pool, vdev.path)}>
+                    {_("Offline")}
+                </StorageMenuItem>
+            );
+        }
     }
 
     items.push(
@@ -84,12 +105,15 @@ function vdev_actions_menu(pool, vdev, parent_vdev) {
         </StorageMenuItem>
     );
 
-    items.push(
-        <StorageMenuItem key="attach"
-                         onClick={() => attach_zfs_vdev(pool, vdev.path)}>
-            {_("Attach mirror")}
-        </StorageMenuItem>
-    );
+    // Attach mirror: not applicable in spare/cache vdev classes or inside raidz groups
+    if (!is_in_special_class && !is_in_raidz) {
+        items.push(
+            <StorageMenuItem key="attach"
+                             onClick={() => attach_zfs_vdev(pool, vdev.path)}>
+                {_("Attach mirror")}
+            </StorageMenuItem>
+        );
+    }
 
     if (is_in_mirror) {
         items.push(
@@ -100,6 +124,9 @@ function vdev_actions_menu(pool, vdev, parent_vdev) {
         );
     }
 
+    if (items.length === 0)
+        return null;
+
     return <StorageBarMenu label={_("Actions")} isKebab menuItems={items} />;
 }
 
@@ -107,7 +134,7 @@ function renderVdev(pool, vdev, depth, key_prefix, parent_vdev) {
     const indent = depth * 24;
     const state_color = zfs_pool_state_color(vdev.state);
     const state_text = fmt_zfs_state(vdev.state);
-    const display_name = vdev.path || vdev_type_label(vdev.type) || _("unknown");
+    const display_name = vdev.path || vdev_type_label(vdev.type) || _("Unknown device");
     const has_errors = vdev.read_errors > 0 || vdev.write_errors > 0 || vdev.checksum_errors > 0;
 
     const rows = [];
@@ -120,7 +147,7 @@ function renderVdev(pool, vdev, depth, key_prefix, parent_vdev) {
                     </Badge>
                 }
                 <span style={{ fontWeight: depth === 0 ? "bold" : "normal" }}>
-                    {depth === 0 ? (vdev.path || vdev_type_label(vdev.type)) : display_name}
+                    {depth === 0 ? (vdev.path || vdev_type_label(vdev.type) || _("Unknown device")) : display_name}
                 </span>
             </Td>
             <Td>
@@ -160,7 +187,9 @@ export const ZFSVdevCard = ({ card, pool }) => {
     const refresh = useCallback(() => {
         client.zfs_pool_call(pool_path, "GetVdevTopology", [{}])
                 .then(result => {
-                    const parsed = result[0].map(parse_vdev);
+                    const raw = Array.isArray(result) ? result[0] : result;
+                    const arr = Array.isArray(raw) ? raw : [];
+                    const parsed = arr.filter(v => v != null).map(parse_vdev);
                     setTopology(parsed);
                     setError(null);
                 })

@@ -8,7 +8,7 @@ import React from "react";
 import client from "../client";
 
 import {
-    dialog_open, TextInput, SelectOne, SelectSpaces, PassInput, CheckBoxes,
+    dialog_open, TextInput, SelectOne, SelectSpaces, CheckBoxes,
 } from "../dialog.jsx";
 import {
     block_name, drive_name, fmt_size, block_cmp,
@@ -424,49 +424,6 @@ export function destroy_zfs_pool(pool, card) {
                 const force = !!(vals.options && vals.options.force);
                 await client.zfs_pool_call(pool.path, "Destroy", [force, {}]);
                 navigate_away_from_card(card);
-            }
-        }
-    });
-}
-
-/* ---- Encryption key management ---- */
-
-export function load_zfs_key(pool) {
-    dialog_open({
-        Title: cockpit.format(_("Load encryption key for $0"), pool.Name),
-        Fields: [
-            PassInput("passphrase", _("Passphrase"), {
-                validate: val => {
-                    if (val === "")
-                        return _("Passphrase is required");
-                    return null;
-                }
-            }),
-        ],
-        Action: {
-            Title: _("Load key"),
-            action: async function (vals) {
-                // Encode passphrase as byte array for D-Bus
-                const encoder = new TextEncoder();
-                const bytes = Array.from(encoder.encode(vals.passphrase));
-                await client.zfs_pool_call(pool.path, "LoadKey", [
-                    { passphrase: { t: 'ay', v: bytes } }
-                ]);
-            }
-        }
-    });
-}
-
-export function unload_zfs_key(pool) {
-    dialog_open({
-        Title: cockpit.format(_("Unload encryption key for $0?"), pool.Name),
-        Body: <div>
-            <p>{_("Unloading the encryption key will lock encrypted datasets. They will be inaccessible until the key is loaded again.")}</p>
-        </div>,
-        Action: {
-            Title: _("Unload key"),
-            action: async function () {
-                await client.zfs_pool_call(pool.path, "UnloadKey", [{}]);
             }
         }
     });
@@ -902,6 +859,9 @@ export function view_edit_pool_properties(pool) {
 
 /* ---- Pool-level: Add vdev ---- */
 
+/* Minimum disk counts per vdev layout */
+const MIN_DISKS = { "": 1, mirror: 2, raidz: 3, raidz2: 4, raidz3: 5, spare: 1, cache: 1, log: 1 };
+
 export function add_vdev_to_pool(pool) {
     const spaces = get_zfs_available_spaces();
 
@@ -913,7 +873,10 @@ export function add_vdev_to_pool(pool) {
                 validate: function (disks, vals) {
                     if (disks.length === 0)
                         return _("At least one block device is needed.");
-                    return validate_vdev_device_count(vals.vdev_type, disks.length);
+                    const vtype = vals.vdev_type;
+                    const min = MIN_DISKS[vtype] || 1;
+                    if (disks.length < min)
+                        return cockpit.format(_("$0 requires at least $1 disks."), vtype || _("Stripe"), min);
                 },
                 spaces,
             }),
@@ -924,6 +887,9 @@ export function add_vdev_to_pool(pool) {
                     { value: "raidz", title: _("RAIDZ") },
                     { value: "raidz2", title: _("RAIDZ2") },
                     { value: "raidz3", title: _("RAIDZ3") },
+                    { value: "spare", title: _("Spare") },
+                    { value: "cache", title: _("Cache (L2ARC)") },
+                    { value: "log", title: _("Log (SLOG)") },
                 ],
             }),
             // Note: no Force checkbox here.  The AddVdev D-Bus handler does

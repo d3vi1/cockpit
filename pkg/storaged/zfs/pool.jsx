@@ -10,7 +10,6 @@ import client from "../client";
 import { CardBody } from "@patternfly/react-core/dist/esm/components/Card/index.js";
 import { DescriptionList } from "@patternfly/react-core/dist/esm/components/DescriptionList/index.js";
 import { Flex, FlexItem } from "@patternfly/react-core/dist/esm/layouts/Flex/index.js";
-import { Badge } from "@patternfly/react-core/dist/esm/components/Badge/index.js";
 
 import { VolumeIcon } from "../icons/gnome-icons.jsx";
 
@@ -24,7 +23,7 @@ import { fmt_zfs_state, zfs_pool_state_color, formatPoolGuid } from "./utils.jsx
 import { ZFSDatasetsCard, create_filesystem, create_volume, create_snapshot } from "./datasets.jsx";
 import { ZFSVdevCard } from "./vdev.jsx";
 import {
-    export_zfs_pool, destroy_zfs_pool, load_zfs_key, unload_zfs_key,
+    export_zfs_pool, destroy_zfs_pool,
     stop_trim_zfs_pool, clear_errors_zfs_pool, upgrade_zfs_pool,
     view_history_zfs_pool, view_edit_pool_properties, add_vdev_to_pool,
 } from "./dialogs.jsx";
@@ -110,21 +109,6 @@ export function make_zfs_pool_page(parent, pool) {
         action: () => export_zfs_pool(pool),
     });
 
-    // Add encryption key actions if pool has encryption info
-    if (pool.Encryption && pool.Encryption !== "off") {
-        if (pool.KeyLoaded) {
-            pool_actions.push({
-                title: _("Unload encryption key"),
-                action: () => unload_zfs_key(pool),
-            });
-        } else {
-            pool_actions.push({
-                title: _("Load encryption key"),
-                action: () => load_zfs_key(pool),
-            });
-        }
-    }
-
     pool_actions.push({
         title: _("Upgrade pool"),
         action: () => upgrade_zfs_pool(pool),
@@ -189,8 +173,6 @@ const ZFSPoolCard = ({ card, pool, use }) => {
     const state_text = fmt_zfs_state(pool.State);
     const health_text = fmt_zfs_state(pool.Health);
 
-    const has_encryption = pool.Encryption && pool.Encryption !== "off";
-
     // Scrub status
     let scrub_status;
     if (pool.ScrubRunning && !pool.ScrubPaused) {
@@ -229,18 +211,6 @@ const ZFSPoolCard = ({ card, pool, use }) => {
                     <StorageDescription title={_("Read only")} value={pool.ReadOnly ? _("Yes") : _("No")} />
                     { pool.Altroot && pool.Altroot !== "-" &&
                     <StorageDescription title={_("Alternate root")} value={pool.Altroot} />
-                    }
-                    { has_encryption &&
-                    <StorageDescription title={_("Encryption")}>
-                        <Flex spaceItems={{ default: 'spaceItemsSm' }}>
-                            <FlexItem>{pool.Encryption}</FlexItem>
-                            <FlexItem>
-                                <Badge isRead={!pool.KeyLoaded}>
-                                    {pool.KeyLoaded ? _("Key loaded") : _("Key not loaded")}
-                                </Badge>
-                            </FlexItem>
-                        </Flex>
-                    </StorageDescription>
                     }
                     { scrub_status &&
                     <StorageDescription title={_("Scrub status")} value={scrub_status} />
