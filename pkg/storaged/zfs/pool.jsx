@@ -19,7 +19,7 @@ import {
 } from "../pages.jsx";
 import { StorageUsageBar } from "../storage-controls.jsx";
 import { fmt_size_long } from "../utils.js";
-import { fmt_zfs_state, zfs_pool_state_color, formatPoolGuid } from "./utils.jsx";
+import { fmt_zfs_state, zfs_state_css_class, formatPoolGuid, fmt_dedup_ratio, fmt_fragmentation } from "./utils.jsx";
 import { ZFSDatasetsCard, create_filesystem, create_volume, create_snapshot } from "./datasets.jsx";
 import { ZFSVdevCard } from "./vdev.jsx";
 import {
@@ -169,7 +169,7 @@ export function make_zfs_pool_page(parent, pool) {
 }
 
 const ZFSPoolCard = ({ card, pool, use }) => {
-    const state_color = zfs_pool_state_color(pool.State);
+    const state_css = zfs_state_css_class(pool.State);
     const state_text = fmt_zfs_state(pool.State);
     const health_text = fmt_zfs_state(pool.Health);
 
@@ -194,7 +194,7 @@ const ZFSPoolCard = ({ card, pool, use }) => {
                     <StorageDescription title={_("State")}>
                         <Flex spaceItems={{ default: 'spaceItemsSm' }}>
                             <FlexItem>
-                                <span style={{ color: state_color }}>&#x2B24;</span>
+                                <span className={"zfs-state-dot " + state_css}>&#x2B24;</span>
                             </FlexItem>
                             <FlexItem>
                                 {state_text}
@@ -206,8 +206,8 @@ const ZFSPoolCard = ({ card, pool, use }) => {
                     <StorageDescription title={_("Usage")}>
                         <StorageUsageBar key="s" stats={use} />
                     </StorageDescription>
-                    <StorageDescription title={_("Dedup ratio")} value={pool.DedupRatio} />
-                    <StorageDescription title={_("Fragmentation")} value={pool.Fragmentation} />
+                    <StorageDescription title={_("Dedup ratio")} value={fmt_dedup_ratio(pool.DedupRatio)} />
+                    <StorageDescription title={_("Fragmentation")} value={fmt_fragmentation(pool.Fragmentation)} />
                     <StorageDescription title={_("Read only")} value={pool.ReadOnly ? _("Yes") : _("No")} />
                     { pool.Altroot && pool.Altroot !== "-" &&
                     <StorageDescription title={_("Alternate root")} value={pool.Altroot} />

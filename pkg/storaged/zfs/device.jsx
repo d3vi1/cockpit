@@ -13,7 +13,7 @@ import { DescriptionList } from "@patternfly/react-core/dist/esm/components/Desc
 import { Flex, FlexItem } from "@patternfly/react-core/dist/esm/layouts/Flex/index.js";
 
 import { StorageCard, StorageDescription, new_card, register_crossref } from "../pages.jsx";
-import { fmt_zfs_state, zfs_pool_state_color } from "./utils.jsx";
+import { fmt_zfs_state, zfs_state_css_class } from "./utils.jsx";
 import { import_zfs_pool } from "./dialogs.jsx";
 
 const _ = cockpit.gettext;
@@ -121,7 +121,7 @@ const ZFSDeviceCard = ({ card, block, content_block, zfs_proxy, is_zvol, pool_na
                     <StorageDescription title={_("Pool state")}>
                         <Flex spaceItems={{ default: 'spaceItemsSm' }}>
                             <FlexItem>
-                                <span style={{ color: zfs_pool_state_color(pool.State) }}>&#x2B24;</span>
+                                <span className={"zfs-state-dot " + zfs_state_css_class(pool.State)}>&#x2B24;</span>
                             </FlexItem>
                             <FlexItem>
                                 {fmt_zfs_state(pool.State)}

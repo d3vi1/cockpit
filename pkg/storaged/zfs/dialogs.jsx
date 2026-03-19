@@ -8,7 +8,7 @@ import React from "react";
 import client from "../client";
 
 import {
-    dialog_open, TextInput, SelectOne, SelectSpaces, CheckBoxes,
+    dialog_open, TextInput, SizeSlider, SelectOne, SelectSpaces, CheckBoxes,
 } from "../dialog.jsx";
 import {
     block_name, drive_name, fmt_size, block_cmp,
@@ -373,8 +373,7 @@ export function import_zfs_pool() {
                     }
                 });
             })
-            .catch(err => {
-                console.warn("ListImportablePools failed, falling back to text input:", err);
+            .catch(() => {
                 import_zfs_pool_with_text_fallback();
             });
 }
@@ -593,7 +592,7 @@ export function view_history_zfs_pool(pool) {
                 const history_text = result[0] || _("No history available.");
                 dialog_open({
                     Title: cockpit.format(_("History for pool $0"), pool.Name),
-                    Body: <pre style={{ whiteSpace: "pre-wrap", maxHeight: "400px", overflow: "auto" }}>{history_text}</pre>,
+                    Body: <pre className="zfs-properties-pre">{history_text}</pre>,
                     Fields: [],
                     Action: {
                         Title: _("Close"),
@@ -715,17 +714,15 @@ export function inherit_property(pool_path, dataset_name) {
 /* ---- Volume: Resize ---- */
 
 export function resize_volume(pool_path, volume_name, current_size) {
+    const pool = client.zfs_pools[pool_path];
+    const max_size = pool ? Number(pool.Free) : undefined;
+
     dialog_open({
         Title: cockpit.format(_("Resize volume $0"), volume_name),
         Fields: [
-            TextInput("new_size", _("New size (bytes)"), {
-                value: current_size ? current_size.toString() : "",
-                validate: val => {
-                    const n = Number(val);
-                    if (isNaN(n) || n <= 0)
-                        return _("Size must be a positive number");
-                    return null;
-                }
+            SizeSlider("new_size", _("New size"), {
+                max: max_size,
+                round: 512,
             }),
             CheckBoxes("options", _("Options"), {
                 fields: [
@@ -795,7 +792,7 @@ export function view_edit_properties(pool_path, dataset_name) {
 
         dialog_open({
             Title: cockpit.format(_("Properties of $0"), dataset_name),
-            Body: <pre style={{ whiteSpace: "pre-wrap", maxHeight: "400px", overflow: "auto", fontFamily: "monospace", fontSize: "12px" }}>
+            Body: <pre className="zfs-properties-pre">
                 {header + "\n" + "─".repeat(60) + "\n" + lines}
             </pre>,
             Fields: [],
@@ -845,7 +842,7 @@ export function view_edit_pool_properties(pool) {
 
         dialog_open({
             Title: cockpit.format(_("Properties of pool $0"), pool_name),
-            Body: <pre style={{ whiteSpace: "pre-wrap", maxHeight: "400px", overflow: "auto", fontFamily: "monospace", fontSize: "12px" }}>
+            Body: <pre className="zfs-properties-pre">
                 {header + "\n" + "─".repeat(60) + "\n" + lines}
             </pre>,
             Fields: [],
