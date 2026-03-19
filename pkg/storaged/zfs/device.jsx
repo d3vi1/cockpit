@@ -52,7 +52,7 @@ export function make_zfs_device_card(next, block, content_block, zfs_proxy) {
     if (is_not_imported) {
         card_actions.push({
             title: _("Import pool"),
-            action: () => import_zfs_pool(),
+            action: () => import_zfs_pool({ name: label }),
         });
     }
 

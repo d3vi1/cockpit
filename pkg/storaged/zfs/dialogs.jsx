@@ -259,11 +259,14 @@ export function create_zfs_pool() {
 
 /* ---- Pool import (Manager.ZFS method) ---- */
 
-function import_zfs_pool_with_text_fallback() {
+function import_zfs_pool_with_text_fallback(pool_context) {
+    const prefill = (pool_context && pool_context.name) ? pool_context.name : "";
+
     dialog_open({
         Title: _("Import ZFS pool"),
         Fields: [
             TextInput("name_or_guid", _("Pool name or GUID"), {
+                value: prefill,
                 validate: val => {
                     if (val === "")
                         return _("Name or GUID is required");
@@ -283,13 +286,20 @@ function import_zfs_pool_with_text_fallback() {
                 if (vals.options && vals.options.force) {
                     options.force = { t: 'b', v: true };
                 }
+                // When importing by GUID (purely numeric), pass the
+                // pool name so the backend can resolve the pool object
+                // (pool objects are keyed by name, not GUID).
+                const is_guid = /^\d+$/.test(vals.name_or_guid);
+                if (is_guid && pool_context && pool_context.name) {
+                    options.new_name = { t: 's', v: pool_context.name };
+                }
                 await client.zfs_manager.PoolImport(vals.name_or_guid, options);
             }
         }
     });
 }
 
-export function import_zfs_pool() {
+export function import_zfs_pool(pool_context) {
     client.zfs_manager.ListImportablePools({})
             .then(result => {
                 // D-Bus return type is aa{sv}.  Cockpit wraps the return
@@ -346,10 +356,21 @@ export function import_zfs_pool() {
                     };
                 });
 
+                // If called from a device context, preselect the matching pool
+                let preselect;
+                if (pool_context && pool_context.name) {
+                    const match = choices.find(c => guid_to_name[c.value] === pool_context.name);
+                    if (match)
+                        preselect = match.value;
+                }
+
                 dialog_open({
                     Title: _("Import ZFS pool"),
                     Fields: [
-                        SelectOne("pool", _("Pool"), { choices }),
+                        SelectOne("pool", _("Pool"), {
+                            choices,
+                            value: preselect,
+                        }),
                         CheckBoxes("options", _("Options"), {
                             fields: [
                                 { tag: "force", title: _("Force import") },
@@ -374,7 +395,7 @@ export function import_zfs_pool() {
                 });
             })
             .catch(() => {
-                import_zfs_pool_with_text_fallback();
+                import_zfs_pool_with_text_fallback(pool_context);
             });
 }
 
