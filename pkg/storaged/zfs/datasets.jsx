@@ -9,7 +9,7 @@ import client from "../client";
 
 import { CardBody } from "@patternfly/react-core/dist/esm/components/Card/index.js";
 import { Toolbar, ToolbarContent, ToolbarItem } from "@patternfly/react-core/dist/esm/components/Toolbar/index.js";
-import { FormSelect, FormSelectOption } from "@patternfly/react-core/dist/esm/components/FormSelect/index.js";
+import { ToggleGroup, ToggleGroupItem } from "@patternfly/react-core/dist/esm/components/ToggleGroup/index.js";
 import { Table, Thead, Tbody, Tr, Th, Td } from '@patternfly/react-table';
 import { EmptyState, EmptyStateBody } from "@patternfly/react-core/dist/esm/components/EmptyState/index.js";
 import { Alert } from "@patternfly/react-core/dist/esm/components/Alert/index.js";
@@ -474,15 +474,28 @@ export const ZFSDatasetsCard = ({ card, pool }) => {
                 <Toolbar>
                     <ToolbarContent>
                         <ToolbarItem>
-                            <FormSelect value={typeFilter}
-                                        aria-label={_("Filter by type")}
-                                        onChange={(_, val) => setTypeFilter(val)}>
-                                <FormSelectOption value="all" label={_("All types")} />
-                                <FormSelectOption value="filesystem" label={_("Filesystems")} />
-                                <FormSelectOption value="volume" label={_("Volumes")} />
-                                <FormSelectOption value="snapshot" label={_("Snapshots")} />
-                                <FormSelectOption value="bookmark" label={_("Bookmarks")} />
-                            </FormSelect>
+                            <ToggleGroup aria-label={_("Filter by type")}>
+                                <ToggleGroupItem isSelected={typeFilter === "all"}
+                                                 buttonId="all"
+                                                 text={_("All types")}
+                                                 onChange={() => setTypeFilter("all")} />
+                                <ToggleGroupItem isSelected={typeFilter === "filesystem"}
+                                                 buttonId="filesystem"
+                                                 text={_("Filesystems")}
+                                                 onChange={() => setTypeFilter("filesystem")} />
+                                <ToggleGroupItem isSelected={typeFilter === "volume"}
+                                                 buttonId="volume"
+                                                 text={_("Volumes")}
+                                                 onChange={() => setTypeFilter("volume")} />
+                                <ToggleGroupItem isSelected={typeFilter === "snapshot"}
+                                                 buttonId="snapshot"
+                                                 text={_("Snapshots")}
+                                                 onChange={() => setTypeFilter("snapshot")} />
+                                <ToggleGroupItem isSelected={typeFilter === "bookmark"}
+                                                 buttonId="bookmark"
+                                                 text={_("Bookmarks")}
+                                                 onChange={() => setTypeFilter("bookmark")} />
+                            </ToggleGroup>
                         </ToolbarItem>
                     </ToolbarContent>
                 </Toolbar>
