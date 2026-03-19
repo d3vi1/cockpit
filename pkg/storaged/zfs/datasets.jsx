@@ -295,10 +295,14 @@ function clone_snapshot(pool_path, snapshot_name) {
     });
 }
 
+const KNOWN_DATASET_TYPES = ["filesystem", "volume", "snapshot", "bookmark"];
+
 function parse_dataset(d) {
+    const raw_type = d.type?.v || "";
     return {
         name: d.name?.v || "",
-        type: d.type?.v || "filesystem",
+        type: KNOWN_DATASET_TYPES.includes(raw_type) ? raw_type : "unknown",
+        raw_type: raw_type,
         mountpoint: d.mountpoint?.v || "-",
         mounted: d.mounted?.v || false,
         used: Number(d.used?.v || 0),
@@ -316,6 +320,7 @@ function type_label(type) {
     case "volume": return _("Volume");
     case "snapshot": return _("Snapshot");
     case "bookmark": return _("Bookmark");
+    case "unknown": return _("Unknown");
     default: return type;
     }
 }
@@ -398,8 +403,8 @@ export const ZFSDatasetsCard = ({ card, pool }) => {
             );
         }
 
-        // Bookmarks are read-only references — only properties and destroy are valid
-        if (d.type === "bookmark") {
+        // Bookmarks and unknown types — only properties and destroy are safe
+        if (d.type === "bookmark" || d.type === "unknown") {
             return (
                 <StorageBarMenu label={_("Actions")} isKebab menuItems={[
                     <StorageMenuItem key="properties"
@@ -414,6 +419,7 @@ export const ZFSDatasetsCard = ({ card, pool }) => {
             );
         }
 
+        // Filesystem and volume actions
         const is_clone = d.origin && d.origin !== "-" && d.origin !== "";
 
         return (
