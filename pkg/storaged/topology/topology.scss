@@ -1,83 +1,69 @@
 /*
  * Styling for the storage topology view.
- * @patternfly/react-topology provides its own styles; we ensure
- * the container has a fixed height, correct background, and readable
- * node styling so the SVG canvas renders correctly.
+ * Plain SVG rendering -- no @patternfly/react-topology classes.
+ *
+ * Node rendering is done in topology-graph.jsx via <rect> + <foreignObject>.
+ * These rules handle the container, controls, and hover effects.
  */
 
 .storage-topology-container {
-    height: 500px;
-    min-height: 400px;
-    background-color: var(--pf-v6-global--BackgroundColor--100, #fff);
+    position: relative;
+    height: 700px;
+    min-height: 600px;
+    background-color: transparent;
+}
 
-    /* Ensure the PF topology visualization surface has a white/transparent
-     * background rather than inheriting a dark one */
-    .pf-topology-visualization-surface {
-        background-color: transparent !important;
-    }
+.storage-topology-container.topology-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--pf-t--global--text--color--subtle, #6a6e73);
+    font-size: 14px;
+}
 
-    .pf-v6-topology-visualization-surface {
-        background-color: transparent !important;
-    }
+.topology-svg {
+    display: block;
+    background-color: transparent;
+    cursor: grab;
+    user-select: none;
+}
 
-    svg {
-        background-color: transparent !important;
-    }
+/* Node hover: thicken the rect stroke */
+.topology-node:hover > rect {
+    stroke-width: 3px;
+}
 
-    /* ── Node styling ─────────────────────────────────────────────
-     * PF topology's CSS custom properties may not be loaded when
-     * the topology CSS bundle is not imported.  Override the node
-     * background to be light with a visible border so labels are
-     * readable.
-     */
-    .pf-topology__node__background {
-        fill: #fff !important;
-        stroke: #6a6e73 !important;
-        stroke-width: 1.5px !important;
-    }
+/* Zoom / fit-to-view control buttons */
+.topology-controls {
+    position: absolute;
+    bottom: 12px;
+    left: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
 
-    /* Status-decorated nodes: use color accents on the border */
-    .pf-m-success > .pf-topology__node__background,
-    .pf-m-success .pf-topology__node__background {
-        stroke: #3e8635 !important;
-        stroke-width: 2px !important;
-    }
-    .pf-m-warning > .pf-topology__node__background,
-    .pf-m-warning .pf-topology__node__background {
-        stroke: #f0ab00 !important;
-        stroke-width: 2px !important;
-    }
-    .pf-m-danger > .pf-topology__node__background,
-    .pf-m-danger .pf-topology__node__background {
-        stroke: #c9190b !important;
-        stroke-width: 2px !important;
-    }
+.topology-control-btn {
+    width: 28px;
+    height: 28px;
+    border: 1px solid var(--pf-t--global--border--color--default, #d2d2d2);
+    border-radius: 4px;
+    background: var(--pf-t--global--background--color--primary--default, #fff);
+    color: var(--pf-t--global--text--color--regular, #151515);
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
 
-    /* Selected node highlight */
-    .pf-m-selected > .pf-topology__node__background,
-    .pf-m-selected .pf-topology__node__background {
-        stroke: #06c !important;
-        stroke-width: 2.5px !important;
-    }
-
-    /* Node labels: ensure dark text on light background */
-    .pf-topology__node__label text {
-        fill: #151515 !important;
-    }
-    .pf-topology__node__label__background {
-        fill: #fff !important;
-        fill-opacity: 0.85 !important;
+    &:hover {
+        background: var(--pf-t--global--background--color--secondary--default, #f0f0f0);
     }
 
-    /* Edge styling: ensure visible but subtle edges */
-    .pf-topology__edge__link {
-        stroke: #8a8d90 !important;
-        stroke-width: 1px !important;
-    }
-    .pf-m-dashed .pf-topology__edge__link {
-        stroke-dasharray: 4 3 !important;
-    }
-    .pf-topology-connector-arrow path {
-        fill: #8a8d90 !important;
+    &:active {
+        background: var(--pf-t--global--background--color--secondary--hover, #e0e0e0);
     }
 }
