@@ -380,7 +380,7 @@ export function import_zfs_pool() {
 
 /* ---- Pool export ---- */
 
-export function export_zfs_pool(pool) {
+export function export_zfs_pool(pool, card) {
     dialog_open({
         Title: cockpit.format(_("Export pool $0?"), pool.Name),
         Body: <div>
@@ -390,6 +390,7 @@ export function export_zfs_pool(pool) {
             Title: _("Export"),
             action: async function () {
                 await client.zfs_pool_call(pool.path, "Export", [false, {}]);
+                navigate_away_from_card(card);
             }
         }
     });
