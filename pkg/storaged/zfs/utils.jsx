@@ -12,7 +12,10 @@ export function zfs_pool_state_color(state) {
     case "ONLINE": return "green";
     case "DEGRADED": return "orange";
     case "FAULTED": return "red";
-    case "OFFLINE": return "grey";
+    case "OFFLINE":
+    case "REMOVED":
+    case "UNAVAIL":
+    case "UNKNOWN":
     default: return "grey";
     }
 }
@@ -34,6 +37,7 @@ export function fmt_zfs_state(state) {
     case "OFFLINE": return _("Offline");
     case "REMOVED": return _("Removed");
     case "UNAVAIL": return _("Unavailable");
-    default: return state;
+    case "UNKNOWN": return _("Unknown");
+    default: return state || _("Unknown");
     }
 }
