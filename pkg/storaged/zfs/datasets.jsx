@@ -437,7 +437,7 @@ export const ZFSDatasetsCard = ({ card, pool }) => {
                     : null,
                 d.type === "volume"
                     ? <StorageMenuItem key="resize"
-                                       onClick={() => resize_volume(pool_path, d.name, d.referenced)}>
+                                       onClick={() => resize_volume(pool_path, d.name)}>
                         {_("Resize")}
                     </StorageMenuItem>
                     : null,
