@@ -212,6 +212,7 @@ export const ZFSVdevCard = ({ card, pool }) => {
                 })
                 .catch(err => {
                     setError(err.toString());
+                    setTopology(null);
                 });
     }, [pool_path]);
 
@@ -244,7 +245,7 @@ export const ZFSVdevCard = ({ card, pool }) => {
                         <EmptyStateBody>{_("No vdev information available")}</EmptyStateBody>
                     </EmptyState>
                 }
-                { topology !== null && topology.length > 0 &&
+                { topology !== null && topology.length > 0 && !error &&
                     <Table aria-label={_("ZFS vdev topology")} variant="compact">
                         <Thead>
                             <Tr>

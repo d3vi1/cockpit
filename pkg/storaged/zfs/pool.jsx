@@ -106,7 +106,7 @@ export function make_zfs_pool_page(parent, pool) {
 
     pool_actions.push({
         title: _("Export pool"),
-        action: () => export_zfs_pool(pool),
+        action: () => export_zfs_pool(pool, pool_card),
     });
 
     pool_actions.push({

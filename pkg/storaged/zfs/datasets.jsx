@@ -347,6 +347,7 @@ export const ZFSDatasetsCard = ({ card, pool }) => {
                 })
                 .catch(err => {
                     setError(err.toString());
+                    setDatasets(null);
                 });
     }, [pool_path]);
 
@@ -497,7 +498,7 @@ export const ZFSDatasetsCard = ({ card, pool }) => {
                         <EmptyStateBody>{_("No datasets")}</EmptyStateBody>
                     </EmptyState>
                 }
-                { datasets !== null && filtered.length > 0 &&
+                { datasets !== null && filtered.length > 0 && !error &&
                     <Table aria-label={_("ZFS datasets")} variant="compact">
                         <Thead>
                             <Tr>
