@@ -713,41 +713,55 @@ export function inherit_property(pool_path, dataset_name) {
 
 /* ---- Volume: Resize ---- */
 
-export function resize_volume(pool_path, volume_name, current_size) {
+export function resize_volume(pool_path, volume_name) {
     const pool = client.zfs_pools[pool_path];
-    const max_size = pool ? Number(pool.Free) : undefined;
 
-    dialog_open({
-        Title: cockpit.format(_("Resize volume $0"), volume_name),
-        Fields: [
-            SizeSlider("new_size", _("New size"), {
-                max: max_size,
-                round: 512,
-            }),
-            CheckBoxes("options", _("Options"), {
-                fields: [
-                    { tag: "confirm_shrink", title: _("I understand that shrinking a volume may cause data loss") },
-                ],
-                visible: vals => {
-                    if (!current_size)
-                        return false;
-                    const n = Number(vals.new_size);
-                    return !isNaN(n) && n > 0 && n < current_size;
-                },
-            }),
-        ],
-        Action: {
-            Title: _("Resize"),
-            action: async function (vals) {
-                const new_size = Number(vals.new_size);
-                if (current_size && new_size < current_size) {
-                    if (!(vals.options && vals.options.confirm_shrink))
-                        return Promise.reject({ options: _("You must confirm that you understand the risk of shrinking.") });
-                }
-                await client.zfs_pool_call(pool_path, "ResizeVolume", [volume_name, new_size, {}]);
-            }
-        }
-    });
+    /* Fetch the actual volsize from ZFS properties before opening the dialog */
+    client.zfs_pool_call(pool_path, "GetDatasetProperty", [volume_name, "volsize", {}])
+            .then(result => {
+                const current_size = Number(result[0]) || 0;
+                const pool_free = pool ? Number(pool.Free) : 0;
+                const max_size = current_size + pool_free;
+
+                dialog_open({
+                    Title: cockpit.format(_("Resize volume $0"), volume_name),
+                    Fields: [
+                        SizeSlider("new_size", _("New size"), {
+                            value: current_size,
+                            max: max_size,
+                            round: 512,
+                        }),
+                        CheckBoxes("options", _("Options"), {
+                            fields: [
+                                { tag: "confirm_shrink", title: _("I understand that shrinking a volume may cause data loss") },
+                            ],
+                            visible: vals => {
+                                if (!current_size)
+                                    return false;
+                                const n = Number(vals.new_size);
+                                return !isNaN(n) && n > 0 && n < current_size;
+                            },
+                        }),
+                    ],
+                    Action: {
+                        Title: _("Resize"),
+                        action: async function (vals) {
+                            const new_size = Number(vals.new_size);
+                            if (current_size && new_size < current_size) {
+                                if (!(vals.options && vals.options.confirm_shrink))
+                                    return Promise.reject({ options: _("You must confirm that you understand the risk of shrinking.") });
+                            }
+                            await client.zfs_pool_call(pool_path, "ResizeVolume", [volume_name, new_size, {}]);
+                        }
+                    }
+                });
+            })
+            .catch(err => {
+                dialog_open({
+                    Title: _("Error"),
+                    Body: err.toString(),
+                });
+            });
 }
 
 /* ---- Dataset: View/Edit properties ---- */
