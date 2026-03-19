@@ -22,6 +22,7 @@ import { create_mdraid } from "../mdraid/create-dialog.jsx";
 import { create_vgroup } from "../lvm2/create-dialog.jsx";
 import { create_stratis_pool } from "../stratis/create-dialog.jsx";
 import { iscsi_change_name, iscsi_discover } from "../iscsi/create-dialog.jsx";
+import { create_zfs_pool, import_zfs_pool } from "../zfs/dialogs.jsx";
 import { get_other_devices } from "../utils.js";
 
 import { new_page, new_card, StorageCard, ChildrenTable } from "../pages.jsx";
@@ -34,6 +35,7 @@ import { make_nfs_page, nfs_fstab_dialog } from "../nfs/nfs.jsx";
 import { make_iscsi_session_page } from "../iscsi/session.jsx";
 import { make_other_page } from "../block/other.jsx";
 import { make_btrfs_volume_page } from "../btrfs/volume.jsx";
+import { make_zfs_pool_page } from "../zfs/pool.jsx";
 
 const _ = cockpit.gettext;
 
@@ -59,6 +61,7 @@ export function make_overview_page() {
     client.nfs.entries.forEach(e => make_nfs_page(overview_page, e));
     get_other_devices(client).map(p => make_other_page(overview_page, client.blocks[p]));
     Object.keys(client.uuids_btrfs_volume).forEach(uuid => make_btrfs_volume_page(overview_page, uuid));
+    Object.keys(client.zfs_pools).forEach(p => make_zfs_pool_page(overview_page, client.zfs_pools[p]));
 }
 
 const OverviewCard = ({ card, plot_state }) => {
@@ -127,10 +130,16 @@ const OverviewCard = ({ card, plot_state }) => {
         is_enabled: () => client.features.iscsi,
     };
 
+    const zfs_feature = {
+        is_enabled: () => client.features.zfs,
+    };
+
     const local_menu_items = [
         menu_item(null, _("Create MDRAID device"), () => create_mdraid()),
         menu_item(lvm2_feature, _("Create LVM2 volume group"), () => create_vgroup()),
         menu_item(stratis_feature, _("Create Stratis pool"), () => create_stratis_pool()),
+        menu_item(zfs_feature, _("Create ZFS pool"), () => create_zfs_pool()),
+        menu_item(zfs_feature, _("Import ZFS pool"), () => import_zfs_pool()),
     ].filter(item => !!item);
 
     const net_menu_items = [

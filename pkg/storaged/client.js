@@ -173,6 +173,9 @@ function init_proxies () {
     client.iscsi_sessions = proxies("ISCSI.Session");
     client.vdo_vols = proxies("VDOVolume");
     client.blocks_fsys_btrfs = proxies("Filesystem.BTRFS");
+    client.zfs_pools = proxies("ZFSPool");
+    client.blocks_zfs = proxies("Block.ZFS");
+    client.blocks_fsys_zfs = proxies("Filesystem.ZFS");
     client.jobs = proxies("Job");
     client.nvme_controller = proxies("NVMe.Controller");
 
@@ -337,6 +340,10 @@ export async function btrfs_poll() {
     const data = JSON.parse(await btrfs_tool(["poll", ...btrfs_poll_options()]));
     btrfs_update(data);
 }
+
+client.zfs_pool_call = function(pool_path, method, args) {
+    return client.storaged_client.call(pool_path, "org.freedesktop.UDisks2.ZFSPool", method, args);
+};
 
 let btrfs_monitor_channel = null;
 
@@ -911,6 +918,15 @@ function init_model(callback) {
             client.features.lvm2 = client.manager_lvm2.valid;
         } catch (error) {
             console.warn("Can't enable storaged lvm2 module", error.toString());
+        }
+
+        try {
+            await client.manager.EnableModule("zfs", true);
+            client.zfs_manager = proxy("Manager.ZFS", "Manager");
+            await client.zfs_manager.wait();
+            client.features.zfs = client.zfs_manager.valid;
+        } catch (error) {
+            console.warn("Can't enable storaged zfs module", error.toString());
         }
     }
 
