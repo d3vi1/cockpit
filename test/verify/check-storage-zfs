@@ -235,13 +235,13 @@ class TestStorageZFS(storagelib.StorageCase):
     # ---- Trim capability gating ----
 
     def testTrimCapabilityGating(self):
-        """Verify that the Trim action is not shown when the pool does
-        not have the trim feature flag enabled."""
+        """Verify that the Trim action is gated by the CanTrim D-Bus
+        property rather than client-side feature-flag parsing."""
         m = self.machine
         b = self.browser
 
         # Create a pool; loopback devices may or may not have trim.
-        # The UI should respect the FeatureFlags property from UDisks.
+        # The UI should respect the CanTrim boolean property from UDisks.
         self._create_pool("testpool0")
 
         self.login_and_go("/storage")
@@ -258,19 +258,16 @@ class TestStorageZFS(storagelib.StorageCase):
         # The "Start scrub" action should always be present
         b.wait_visible(self.dropdown_action("Start scrub"))
 
-        # Check whether "Start trim" is correctly gated by feature flags.
-        # The frontend checks pool.FeatureFlags for any entry containing
-        # "trim".  We mirror that check from the machine side by looking
-        # at zpool feature flags that contain "trim".
-        trim_out = m.execute(
-            "zpool get all testpool0 2>/dev/null "
-            "| grep 'feature.*trim' || true"
-        )
-        has_trim = "trim" in trim_out
+        # Query the CanTrim boolean property from UDisks over D-Bus.
+        # The pool object path encodes the pool name.
+        can_trim_out = m.execute(
+            "busctl get-property org.freedesktop.UDisks2 "
+            "/org/freedesktop/UDisks2/zfs/pools/testpool0 "
+            "org.freedesktop.UDisks2.ZFSPool CanTrim"
+        ).strip()
+        has_trim = can_trim_out == "b true"
 
-        # The trim action check: if the pool has trim features, it should
-        # be present; if not, it should be absent.  This validates the
-        # fail-closed design in pool.jsx.
+        # The trim action should match the CanTrim property value.
         if has_trim:
             b.wait_visible(self.dropdown_action("Start trim"))
         else:
