@@ -69,10 +69,13 @@ export function make_zfs_pool_page(parent, pool) {
     // CanTrim is a boolean D-Bus property that accounts for both the
     // OpenZFS version (0.8.0+) and the pool's device_trim feature state.
     if (pool.CanTrim) {
-        // No TrimRunning property is available from the backend yet,
-        // so we can only offer "Start trim" (never "Stop trim").
-        // Disable while a scrub is running — these compete for I/O.
-        if (!pool.ScrubRunning) {
+        if (pool.TrimRunning) {
+            pool_actions.push({
+                title: _("Stop trim"),
+                action: () => client.run(() => client.zfs_pool_call(pool.path, "TrimStop", [{}])),
+            });
+        } else if (!pool.ScrubRunning) {
+            // Disable "Start trim" while a scrub is running — they compete for I/O.
             pool_actions.push({
                 title: _("Start trim"),
                 action: () => client.run(() => client.zfs_pool_call(pool.path, "TrimStart", [{}])),
