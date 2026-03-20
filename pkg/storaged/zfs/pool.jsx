@@ -37,10 +37,14 @@ export function make_zfs_pool_page(parent, pool) {
 
     // Scrub actions (contextual)
     if (pool.ScrubRunning && !pool.ScrubPaused) {
-        pool_actions.push({
-            title: _("Pause scrub"),
-            action: () => client.run(() => client.zfs_pool_call(pool.path, "ScrubPause", [{}])),
-        });
+        // CanScrubPause is a boolean D-Bus property that indicates whether
+        // the installed OpenZFS version supports "zpool scrub -p" (0.8.0+).
+        if (pool.CanScrubPause) {
+            pool_actions.push({
+                title: _("Pause scrub"),
+                action: () => client.run(() => client.zfs_pool_call(pool.path, "ScrubPause", [{}])),
+            });
+        }
         pool_actions.push({
             title: _("Stop scrub"),
             action: () => client.run(() => client.zfs_pool_call(pool.path, "ScrubStop", [{}])),
@@ -61,14 +65,10 @@ export function make_zfs_pool_page(parent, pool) {
         });
     }
 
-    // Trim actions — only show when the pool explicitly has trim capability.
-    // FeatureFlags is an "as" property listing enabled feature flags.
-    // Fail-closed: if FeatureFlags is missing or empty, don't offer trim
-    // (the backend may not have populated them yet).
-    const feature_flags = pool.FeatureFlags || [];
-    const has_trim_feature = feature_flags.length > 0 &&
-                             feature_flags.some(f => f.indexOf("trim") >= 0);
-    if (has_trim_feature) {
+    // Trim actions — only show when the backend reports trim capability.
+    // CanTrim is a boolean D-Bus property that accounts for both the
+    // OpenZFS version (0.8.0+) and the pool's device_trim feature state.
+    if (pool.CanTrim) {
         // No TrimRunning property is available from the backend yet,
         // so we can only offer "Start trim" (never "Stop trim").
         // Disable while a scrub is running — these compete for I/O.
