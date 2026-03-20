@@ -8,7 +8,6 @@ import React, { useState, useEffect, useCallback } from "react";
 import client from "../client";
 
 import { CardBody } from "@patternfly/react-core/dist/esm/components/Card/index.js";
-import { Label } from "@patternfly/react-core/dist/esm/components/Label/index.js";
 import { EmptyState, EmptyStateBody } from "@patternfly/react-core/dist/esm/components/EmptyState/index.js";
 import { Spinner } from "@patternfly/react-core/dist/esm/components/Spinner/index.js";
 import { Alert } from "@patternfly/react-core/dist/esm/components/Alert/index.js";
@@ -160,9 +159,6 @@ function renderVdev(pool, vdev, depth, key_prefix, parent_vdev) {
     rows.push(
         <Tr key={key_prefix}>
             <Td className="zfs-vdev-indent" style={{ "--zfs-vdev-level": depth }}>
-                {depth === 0 && vdev.type &&
-                    <Label className="pf-v6-u-mr-sm" isCompact>{vdev_type_label(vdev.type)}</Label>
-                }
                 <span className={depth === 0 ? "pf-v6-u-font-weight-bold" : undefined}>
                     {display_name}
                 </span>
