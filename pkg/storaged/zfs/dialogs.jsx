@@ -213,10 +213,15 @@ export function create_zfs_pool() {
                 validate: val => {
                     if (val === "")
                         return _("Name is required");
-                    if (/\s/.test(val))
-                        return _("Name cannot contain spaces");
-                    if (val.indexOf("/") >= 0)
-                        return _("Name cannot contain '/'");
+                    if (val.length > 239)
+                        return _("Name cannot exceed 239 characters");
+                    if (!/^[a-zA-Z]/.test(val))
+                        return _("Name must start with a letter");
+                    if (!/^[a-zA-Z][a-zA-Z0-9_.:-]*$/.test(val))
+                        return _("Name can only contain letters, digits, and _ . : -");
+                    // Reject reserved vdev-type prefixes (mirror*, raidz*, spare*, draid*)
+                    if (/^(mirror|raidz|spare|draid)/.test(val))
+                        return _("Name cannot start with a reserved prefix (mirror, raidz, spare, draid)");
                     // Check for duplicate name
                     if (find_pool(val))
                         return _("A pool with this name already exists");
@@ -394,8 +399,19 @@ export function import_zfs_pool(pool_context) {
                     }
                 });
             })
-            .catch(() => {
-                import_zfs_pool_with_text_fallback(pool_context);
+            .catch(err => {
+                // Only fall back to text input if the method does not exist
+                // (older UDisks without ListImportablePools).  For real errors
+                // (auth failures, backend errors) surface the message.
+                const name = err && (err.name || "");
+                if (name.indexOf("UnknownMethod") >= 0 || name.indexOf("UnknownInterface") >= 0) {
+                    import_zfs_pool_with_text_fallback(pool_context);
+                } else {
+                    dialog_open({
+                        Title: _("Error listing importable pools"),
+                        Body: <p>{err ? err.toString() : _("Unknown error")}</p>,
+                    });
+                }
             });
 }
 
