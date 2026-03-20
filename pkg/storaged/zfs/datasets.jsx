@@ -10,7 +10,6 @@ import client from "../client";
 import { Button } from "@patternfly/react-core/dist/esm/components/Button/index.js";
 import { CardBody } from "@patternfly/react-core/dist/esm/components/Card/index.js";
 import { SearchInput } from "@patternfly/react-core/dist/esm/components/SearchInput/index.js";
-import { Toolbar, ToolbarContent, ToolbarItem } from "@patternfly/react-core/dist/esm/components/Toolbar/index.js";
 import { ToggleGroup, ToggleGroupItem } from "@patternfly/react-core/dist/esm/components/ToggleGroup/index.js";
 import { Table, Thead, Tbody, Tr, Th, Td } from '@patternfly/react-table';
 import { EmptyState, EmptyStateBody } from "@patternfly/react-core/dist/esm/components/EmptyState/index.js";
@@ -694,46 +693,40 @@ export const ZFSDatasetsCard = ({ card, pool }) => {
     return (
         <StorageCard card={card}>
             <CardBody>
-                <Toolbar>
-                    <ToolbarContent>
-                        <ToolbarItem>
-                            <ToggleGroup aria-label={_("Filter by type")}>
-                                <ToggleGroupItem isSelected={typeFilter === "all"}
-                                                 buttonId="all"
-                                                 text={_("All types")}
-                                                 onChange={() => setTypeFilter("all")} />
-                                <ToggleGroupItem isSelected={typeFilter === "filesystem"}
-                                                 buttonId="filesystem"
-                                                 text={_("Filesystems")}
-                                                 onChange={() => setTypeFilter("filesystem")} />
-                                <ToggleGroupItem isSelected={typeFilter === "volume"}
-                                                 buttonId="volume"
-                                                 text={_("Volumes")}
-                                                 onChange={() => setTypeFilter("volume")} />
-                                <ToggleGroupItem isSelected={typeFilter === "snapshot"}
-                                                 buttonId="snapshot"
-                                                 text={_("Snapshots")}
-                                                 onChange={() => setTypeFilter("snapshot")} />
-                                <ToggleGroupItem isSelected={typeFilter === "bookmark"}
-                                                 buttonId="bookmark"
-                                                 text={_("Bookmarks")}
-                                                 onChange={() => setTypeFilter("bookmark")} />
-                            </ToggleGroup>
-                        </ToolbarItem>
-                        { datasets !== null && is_filtered &&
-                            <ToolbarItem>
-                                {cockpit.format(_("Showing $0 of $1 datasets"), filtered.length, datasets.length)}
-                            </ToolbarItem>
-                        }
-                        <ToolbarItem align={{ default: "alignEnd" }}>
-                            <SearchInput id="zfs-datasets-search"
-                                         placeholder={_("Filter by name")}
-                                         value={searchText}
-                                         onChange={(_event, val) => setSearchText(val)}
-                                         onClear={() => setSearchText("")} />
-                        </ToolbarItem>
-                    </ToolbarContent>
-                </Toolbar>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <ToggleGroup aria-label={_("Filter by type")}>
+                        <ToggleGroupItem isSelected={typeFilter === "all"}
+                                         buttonId="all"
+                                         text={_("All types")}
+                                         onChange={() => setTypeFilter("all")} />
+                        <ToggleGroupItem isSelected={typeFilter === "filesystem"}
+                                         buttonId="filesystem"
+                                         text={_("Filesystems")}
+                                         onChange={() => setTypeFilter("filesystem")} />
+                        <ToggleGroupItem isSelected={typeFilter === "volume"}
+                                         buttonId="volume"
+                                         text={_("Volumes")}
+                                         onChange={() => setTypeFilter("volume")} />
+                        <ToggleGroupItem isSelected={typeFilter === "snapshot"}
+                                         buttonId="snapshot"
+                                         text={_("Snapshots")}
+                                         onChange={() => setTypeFilter("snapshot")} />
+                        <ToggleGroupItem isSelected={typeFilter === "bookmark"}
+                                         buttonId="bookmark"
+                                         text={_("Bookmarks")}
+                                         onChange={() => setTypeFilter("bookmark")} />
+                    </ToggleGroup>
+                    { datasets !== null && is_filtered &&
+                        <span style={{ whiteSpace: "nowrap" }}>{cockpit.format(_("Showing $0 of $1 datasets"), filtered.length, datasets.length)}</span>
+                    }
+                    <div style={{ marginLeft: "auto", flexShrink: 0, width: "200px" }}>
+                        <SearchInput id="zfs-datasets-search"
+                                     placeholder={_("Filter by name")}
+                                     value={searchText}
+                                     onChange={(_event, val) => setSearchText(val)}
+                                     onClear={() => setSearchText("")} />
+                    </div>
+                </div>
             </CardBody>
             <CardBody className="contains-list">
                 { error &&
