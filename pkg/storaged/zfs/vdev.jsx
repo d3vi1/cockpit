@@ -11,16 +11,29 @@ import { CardBody } from "@patternfly/react-core/dist/esm/components/Card/index.
 import { EmptyState, EmptyStateBody } from "@patternfly/react-core/dist/esm/components/EmptyState/index.js";
 import { Spinner } from "@patternfly/react-core/dist/esm/components/Spinner/index.js";
 import { Alert } from "@patternfly/react-core/dist/esm/components/Alert/index.js";
+import { Label } from "@patternfly/react-core/dist/esm/components/Label/index.js";
 import { Table, Thead, Tbody, Tr, Th, Td } from '@patternfly/react-table';
 import { StorageCard } from "../pages.jsx";
 import { StorageBarMenu, StorageMenuItem } from "../storage-controls.jsx";
-import { zfs_state_css_class, fmt_zfs_state } from "./utils.jsx";
+import { fmt_zfs_state } from "./utils.jsx";
 import {
     replace_zfs_vdev, attach_zfs_vdev, detach_zfs_vdev,
     online_zfs_vdev, offline_zfs_vdev,
 } from "./dialogs.jsx";
 
 const _ = cockpit.gettext;
+
+function zfs_state_label_color(state) {
+    switch (state) {
+    case "ONLINE": return "green";
+    case "DEGRADED": return "gold";
+    case "FAULTED":
+    case "UNAVAIL": return "red";
+    case "OFFLINE":
+    case "REMOVED":
+    default: return "grey";
+    }
+}
 
 /* Unwrap D-Bus variant values: Cockpit's D-Bus client may deliver
  * a{sv} dictionary entries as either raw values or {v: <value>}
@@ -144,14 +157,20 @@ function vdev_actions_menu(pool, vdev, parent_vdev) {
 }
 
 function renderVdev(pool, vdev, depth, key_prefix, parent_vdev) {
-    const state_css = zfs_state_css_class(vdev.state);
     const state_text = fmt_zfs_state(vdev.state);
     const is_aggregate = vdev.children && vdev.children.length > 0;
     // Aggregate rows (mirror-0, raidz1-0, etc.) show the human-readable type
-    // label; leaf rows show the device path.
-    const display_name = is_aggregate
-        ? vdev_type_label(vdev.type) || vdev.path || _("Unknown device")
-        : vdev.path || vdev_type_label(vdev.type) || _("Unknown device");
+    // label with the vdev identifier; leaf rows show the device path.
+    let display_name;
+    if (is_aggregate) {
+        const type_text = vdev_type_label(vdev.type) || _("Unknown device");
+        // Show the vdev group identifier alongside the type (e.g., "Mirror (mirror-0)")
+        display_name = vdev.path
+            ? cockpit.format("$0 ($1)", type_text, vdev.path)
+            : type_text;
+    } else {
+        display_name = vdev.path || vdev_type_label(vdev.type) || _("Unknown device");
+    }
     const has_errors = vdev.read_errors > 0 || vdev.write_errors > 0 || vdev.checksum_errors > 0;
     const error_class = has_errors ? "zfs-vdev-error" : undefined;
 
@@ -164,9 +183,9 @@ function renderVdev(pool, vdev, depth, key_prefix, parent_vdev) {
                 </span>
             </Td>
             <Td>
-                <span className={"zfs-state-text " + state_css}>
+                <Label isCompact color={zfs_state_label_color(vdev.state)}>
                     {state_text}
-                </span>
+                </Label>
             </Td>
             <Td className={error_class}>
                 {vdev.read_errors}
@@ -242,7 +261,7 @@ export const ZFSVdevCard = ({ card, pool }) => {
                     </EmptyState>
                 }
                 { topology !== null && topology.length > 0 && !error &&
-                    <Table aria-label={_("ZFS vdev topology")} variant="compact">
+                    <Table aria-label={_("Vdev topology")} variant="compact">
                         <Thead>
                             <Tr>
                                 <Th>{_("Device")}</Th>

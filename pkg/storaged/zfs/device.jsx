@@ -10,13 +10,25 @@ import client from "../client";
 import { Button } from "@patternfly/react-core/dist/esm/components/Button/index.js";
 import { CardBody } from "@patternfly/react-core/dist/esm/components/Card/index.js";
 import { DescriptionList } from "@patternfly/react-core/dist/esm/components/DescriptionList/index.js";
-import { Flex, FlexItem } from "@patternfly/react-core/dist/esm/layouts/Flex/index.js";
+import { Label } from "@patternfly/react-core/dist/esm/components/Label/index.js";
 
 import { StorageCard, StorageDescription, new_card, register_crossref } from "../pages.jsx";
-import { fmt_zfs_state, zfs_state_css_class } from "./utils.jsx";
+import { fmt_zfs_state } from "./utils.jsx";
 import { import_zfs_pool } from "./dialogs.jsx";
 
 const _ = cockpit.gettext;
+
+function zfs_state_label_color(state) {
+    switch (state) {
+    case "ONLINE": return "green";
+    case "DEGRADED": return "gold";
+    case "FAULTED":
+    case "UNAVAIL": return "red";
+    case "OFFLINE":
+    case "REMOVED":
+    default: return "grey";
+    }
+}
 
 export function make_zfs_device_card(next, block, content_block, zfs_proxy) {
     /* zfs_proxy can be either Block.ZFS (pool member) or Filesystem.ZFS (zvol).
@@ -119,14 +131,9 @@ const ZFSDeviceCard = ({ card, block, content_block, zfs_proxy, is_zvol, pool_na
                     }
                     { pool &&
                     <StorageDescription title={_("Pool state")}>
-                        <Flex spaceItems={{ default: 'spaceItemsSm' }}>
-                            <FlexItem>
-                                <span className={"zfs-state-dot " + zfs_state_css_class(pool.State)}>&#x2B24;</span>
-                            </FlexItem>
-                            <FlexItem>
-                                {fmt_zfs_state(pool.State)}
-                            </FlexItem>
-                        </Flex>
+                        <Label isCompact color={zfs_state_label_color(pool.State)}>
+                            {fmt_zfs_state(pool.State)}
+                        </Label>
                     </StorageDescription>
                     }
                 </DescriptionList>

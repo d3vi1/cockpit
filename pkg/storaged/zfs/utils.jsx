@@ -7,23 +7,6 @@ import cockpit from "cockpit";
 
 const _ = cockpit.gettext;
 
-/**
- * Return a CSS class name for the given ZFS state.
- * These classes are defined in storage.scss and use PatternFly design tokens.
- */
-export function zfs_state_css_class(state) {
-    switch (state) {
-    case "ONLINE": return "zfs-state--online";
-    case "DEGRADED": return "zfs-state--degraded";
-    case "FAULTED": return "zfs-state--faulted";
-    case "OFFLINE":
-    case "REMOVED":
-    case "UNAVAIL":
-    case "UNKNOWN":
-    default: return "zfs-state--offline";
-    }
-}
-
 export function formatPoolGuid(guid) {
     if (!guid) return "";
     try {

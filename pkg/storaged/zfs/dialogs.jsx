@@ -7,8 +7,10 @@ import cockpit from "cockpit";
 import React from "react";
 import client from "../client";
 
+import { Table, Thead, Tbody, Tr, Th, Td } from '@patternfly/react-table';
+
 import {
-    dialog_open, TextInput, SizeSlider, SelectOne, SelectSpaces, CheckBoxes,
+    dialog_open, TextInput, SizeSlider, SelectOne, SelectSpaces, CheckBoxes, PassInput,
 } from "../dialog.jsx";
 import {
     block_name, drive_name, fmt_size, block_cmp,
@@ -156,30 +158,49 @@ function get_zfs_available_spaces() {
     }));
 }
 
-/* ---- Vdev layout validation ---- */
+/* ---- Vdev layout constants and validation ---- */
+
+/**
+ * Canonical vdev layout table.  Each entry defines:
+ *   - value: the D-Bus wire value (empty string for stripe)
+ *   - title: translatable display name
+ *   - min: minimum number of devices required
+ *   - pool_create: whether the layout is available during pool creation
+ *
+ * The "spare", "cache", and "log" types are only valid when adding a
+ * vdev to an existing pool (pool_create: false).
+ */
+const VDEV_LAYOUTS = [
+    { value: "",       title: () => _("Stripe (no redundancy)"), min: 1, pool_create: true },
+    { value: "mirror", title: () => _("Mirror"),                 min: 2, pool_create: true },
+    { value: "raidz",  title: () => _("RAIDZ"),                  min: 3, pool_create: true },
+    { value: "raidz2", title: () => _("RAIDZ2"),                 min: 4, pool_create: true },
+    { value: "raidz3", title: () => _("RAIDZ3"),                 min: 5, pool_create: true },
+    { value: "spare",  title: () => _("Spare"),                  min: 1, pool_create: false },
+    { value: "cache",  title: () => _("Cache (L2ARC)"),          min: 1, pool_create: false },
+    { value: "log",    title: () => _("Log (SLOG)"),             min: 1, pool_create: false },
+];
+
+/**
+ * Build a SelectOne choices array from VDEV_LAYOUTS, optionally filtered
+ * to only pool-creation-valid layouts.
+ */
+function vdev_layout_choices(pool_create_only) {
+    return VDEV_LAYOUTS
+            .filter(l => !pool_create_only || l.pool_create)
+            .map(l => ({ value: l.value, title: l.title() }));
+}
 
 /**
  * Validate that the number of selected devices is sufficient for the chosen
  * vdev layout.  Returns an error string or null.
  */
 function validate_vdev_device_count(vdev_type, count) {
-    const min_devices = {
-        mirror: 2,
-        raidz: 3,
-        raidz2: 4,
-        raidz3: 5,
-    };
-    const min = min_devices[vdev_type];
-    if (min && count < min) {
-        const layout_names = {
-            mirror: _("Mirror"),
-            raidz: _("RAIDZ"),
-            raidz2: _("RAIDZ2"),
-            raidz3: _("RAIDZ3"),
-        };
+    const layout = VDEV_LAYOUTS.find(l => l.value === vdev_type);
+    if (layout && count < layout.min) {
         return cockpit.format(
             _("$0 requires at least $1 devices, but only $2 selected."),
-            layout_names[vdev_type], min, count
+            layout.title(), layout.min, count
         );
     }
     return null;
@@ -219,9 +240,12 @@ export function create_zfs_pool() {
                         return _("Name must start with a letter");
                     if (!/^[a-zA-Z][a-zA-Z0-9_.:-]*$/.test(val))
                         return _("Name can only contain letters, digits, and _ . : -");
-                    // Reject reserved vdev-type prefixes (mirror*, raidz*, spare*, draid*)
-                    if (/^(mirror|raidz|spare|draid)/.test(val))
+                    // Reject reserved vdev-type prefixes (mirror*, raidz*, spare*, draid*) case-insensitively
+                    if (/^(mirror|raidz|spare|draid)/i.test(val))
                         return _("Name cannot start with a reserved prefix (mirror, raidz, spare, draid)");
+                    // Reject "log" as an exact pool name (reserved vdev class)
+                    if (/^log$/i.test(val))
+                        return _("Name cannot be 'log' (reserved vdev class name)");
                     // Check for duplicate name
                     if (find_pool(val))
                         return _("A pool with this name already exists");
@@ -238,13 +262,7 @@ export function create_zfs_pool() {
                 spaces,
             }),
             SelectOne("vdev_type", _("Layout"), {
-                choices: [
-                    { value: "", title: _("Stripe (no redundancy)") },
-                    { value: "mirror", title: _("Mirror") },
-                    { value: "raidz", title: _("RAIDZ") },
-                    { value: "raidz2", title: _("RAIDZ2") },
-                    { value: "raidz3", title: _("RAIDZ3") },
-                ],
+                choices: vdev_layout_choices(true),
             }),
         ],
         Action: {
@@ -627,10 +645,51 @@ export function upgrade_zfs_pool(pool) {
 export function view_history_zfs_pool(pool) {
     client.zfs_pool_call(pool.path, "GetHistory", [{}])
             .then(result => {
-                const history_text = result[0] || _("No history available.");
+                const history_text = result[0] || "";
+
+                if (!history_text) {
+                    dialog_open({
+                        Title: cockpit.format(_("History for pool $0"), pool.Name),
+                        Body: <p>{_("No history available.")}</p>,
+                        Fields: [],
+                        Action: {
+                            Title: _("Close"),
+                            action: function () { /* nothing */ }
+                        }
+                    });
+                    return;
+                }
+
+                /* Parse history lines into structured rows.
+                 * Expected format: "2024-01-15.10:30:45 zpool create tank ..."
+                 */
+                const history_regex = /^(\d{4}-\d{2}-\d{2}\.\d{2}:\d{2}:\d{2})\s+(.*)$/;
+                const lines = history_text.split("\n").filter(l => l.trim());
+                const parsed_rows = lines.map(line => {
+                    const m = history_regex.exec(line);
+                    if (m)
+                        return { timestamp: m[1], action: m[2] };
+                    return { timestamp: "-", action: line };
+                });
+
                 dialog_open({
                     Title: cockpit.format(_("History for pool $0"), pool.Name),
-                    Body: <pre className="zfs-properties-pre">{history_text}</pre>,
+                    Body: <Table variant="compact" aria-label={_("Pool history")}>
+                        <Thead>
+                            <Tr>
+                                <Th>{_("Timestamp")}</Th>
+                                <Th>{_("Action")}</Th>
+                            </Tr>
+                        </Thead>
+                        <Tbody>
+                            { parsed_rows.map((row, idx) => (
+                                <Tr key={idx}>
+                                    <Td>{row.timestamp}</Td>
+                                    <Td>{row.action}</Td>
+                                </Tr>
+                            )) }
+                        </Tbody>
+                    </Table>,
                     Fields: [],
                     Action: {
                         Title: _("Close"),
@@ -802,13 +861,11 @@ export function resize_volume(pool_path, volume_name) {
             });
 }
 
-/* ---- Dataset: View/Edit properties ---- */
+/* ---- Dataset: View properties ---- */
 
-export function view_edit_properties(pool_path, dataset_name) {
-    /* This dialog is used for both pool and dataset properties.
-     * It fetches all properties via GetDatasetProperty for a list of
-     * well-known properties, displays them in a table, and allows
-     * editing and inheriting individual values. */
+export function view_properties(pool_path, dataset_name) {
+    /* This dialog fetches all properties via GetDatasetProperty for a list of
+     * well-known properties and displays them in a PatternFly table. */
 
     const known_properties = [
         "compression", "atime", "relatime", "dedup", "sync",
@@ -835,18 +892,26 @@ export function view_edit_properties(pool_path, dataset_name) {
     );
 
     Promise.all(fetches).then(props => {
-        /* Format properties as a readable text table */
-        const lines = props.map(p =>
-            cockpit.format("$0\t$1\t($2)", p.name, p.value, p.source)
-        ).join("\n");
-
-        const header = cockpit.format("$0\t$1\t$2", _("Property"), _("Value"), _("Source"));
-
         dialog_open({
             Title: cockpit.format(_("Properties of $0"), dataset_name),
-            Body: <pre className="zfs-properties-pre">
-                {header + "\n" + "─".repeat(60) + "\n" + lines}
-            </pre>,
+            Body: <Table variant="compact" aria-label={_("Dataset properties")}>
+                <Thead>
+                    <Tr>
+                        <Th>{_("Property")}</Th>
+                        <Th>{_("Value")}</Th>
+                        <Th>{_("Source")}</Th>
+                    </Tr>
+                </Thead>
+                <Tbody>
+                    { props.map(p => (
+                        <Tr key={p.name}>
+                            <Td>{p.name}</Td>
+                            <Td>{p.value}</Td>
+                            <Td>{p.source}</Td>
+                        </Tr>
+                    )) }
+                </Tbody>
+            </Table>,
             Fields: [],
             Action: {
                 Title: _("Close"),
@@ -856,9 +921,9 @@ export function view_edit_properties(pool_path, dataset_name) {
     });
 }
 
-/* ---- Pool: View/Edit properties ---- */
+/* ---- Pool: View properties ---- */
 
-export function view_edit_pool_properties(pool) {
+export function view_pool_properties(pool) {
     const pool_path = pool.path;
     const pool_name = pool.Name;
 
@@ -886,17 +951,26 @@ export function view_edit_pool_properties(pool) {
     );
 
     Promise.all(fetches).then(props => {
-        const lines = props.map(p =>
-            cockpit.format("$0\t$1\t($2)", p.name, p.value, p.source)
-        ).join("\n");
-
-        const header = cockpit.format("$0\t$1\t$2", _("Property"), _("Value"), _("Source"));
-
         dialog_open({
             Title: cockpit.format(_("Properties of pool $0"), pool_name),
-            Body: <pre className="zfs-properties-pre">
-                {header + "\n" + "─".repeat(60) + "\n" + lines}
-            </pre>,
+            Body: <Table variant="compact" aria-label={_("Pool properties")}>
+                <Thead>
+                    <Tr>
+                        <Th>{_("Property")}</Th>
+                        <Th>{_("Value")}</Th>
+                        <Th>{_("Source")}</Th>
+                    </Tr>
+                </Thead>
+                <Tbody>
+                    { props.map(p => (
+                        <Tr key={p.name}>
+                            <Td>{p.name}</Td>
+                            <Td>{p.value}</Td>
+                            <Td>{p.source}</Td>
+                        </Tr>
+                    )) }
+                </Tbody>
+            </Table>,
             Fields: [],
             Action: {
                 Title: _("Close"),
@@ -906,10 +980,62 @@ export function view_edit_pool_properties(pool) {
     });
 }
 
-/* ---- Pool-level: Add vdev ---- */
+/* ---- Dataset: Load encryption key ---- */
 
-/* Minimum disk counts per vdev layout */
-const MIN_DISKS = { "": 1, mirror: 2, raidz: 3, raidz2: 4, raidz3: 5, spare: 1, cache: 1, log: 1 };
+export function load_key(pool_path, dataset_name) {
+    dialog_open({
+        Title: cockpit.format(_("Load encryption key for $0"), dataset_name),
+        Fields: [
+            PassInput("passphrase", _("Passphrase"), {}),
+        ],
+        Action: {
+            Title: _("Load key"),
+            action: async function (vals) {
+                const encoder = new TextEncoder();
+                const encoded = Array.from(encoder.encode(vals.passphrase));
+                await client.zfs_pool_call(pool_path, "LoadKey", [dataset_name, { passphrase: { t: 'ay', v: encoded } }]);
+            }
+        }
+    });
+}
+
+/* ---- Dataset: Unload encryption key ---- */
+
+export function unload_key(pool_path, dataset_name) {
+    dialog_open({
+        Title: cockpit.format(_("Unload encryption key for $0?"), dataset_name),
+        Body: <div>
+            <p>{cockpit.format(_("Unloading the key for $0 will make the dataset inaccessible until the key is loaded again."), dataset_name)}</p>
+        </div>,
+        Action: {
+            Title: _("Unload key"),
+            action: async function () {
+                await client.zfs_pool_call(pool_path, "UnloadKey", [dataset_name, {}]);
+            }
+        }
+    });
+}
+
+/* ---- Dataset: Change encryption key ---- */
+
+export function change_key(pool_path, dataset_name) {
+    dialog_open({
+        Title: cockpit.format(_("Change encryption key for $0"), dataset_name),
+        Fields: [
+            PassInput("passphrase", _("New passphrase"), {}),
+        ],
+        Action: {
+            Title: _("Change key"),
+            action: async function (vals) {
+                const encoder = new TextEncoder();
+                const encoded = Array.from(encoder.encode(vals.passphrase));
+                await client.zfs_pool_call(pool_path, "ChangeKey", [dataset_name, { passphrase: { t: 'ay', v: encoded } }]);
+            }
+        }
+    });
+}
+
+/* ---- Pool-level: Add vdev ---- */
 
 export function add_vdev_to_pool(pool) {
     const spaces = get_zfs_available_spaces();
@@ -922,24 +1048,12 @@ export function add_vdev_to_pool(pool) {
                 validate: function (disks, vals) {
                     if (disks.length === 0)
                         return _("At least one block device is needed.");
-                    const vtype = vals.vdev_type;
-                    const min = MIN_DISKS[vtype] || 1;
-                    if (disks.length < min)
-                        return cockpit.format(_("$0 requires at least $1 disks."), vtype || _("Stripe"), min);
+                    return validate_vdev_device_count(vals.vdev_type, disks.length);
                 },
                 spaces,
             }),
             SelectOne("vdev_type", _("Vdev type"), {
-                choices: [
-                    { value: "", title: _("Stripe (no redundancy)") },
-                    { value: "mirror", title: _("Mirror") },
-                    { value: "raidz", title: _("RAIDZ") },
-                    { value: "raidz2", title: _("RAIDZ2") },
-                    { value: "raidz3", title: _("RAIDZ3") },
-                    { value: "spare", title: _("Spare") },
-                    { value: "cache", title: _("Cache (L2ARC)") },
-                    { value: "log", title: _("Log (SLOG)") },
-                ],
+                choices: vdev_layout_choices(false),
             }),
             // Note: no Force checkbox here.  The AddVdev D-Bus handler does
             // not extract a "force" option, so showing the checkbox would

@@ -9,8 +9,6 @@ import client from "../client";
 
 import { CardBody } from "@patternfly/react-core/dist/esm/components/Card/index.js";
 import { DescriptionList } from "@patternfly/react-core/dist/esm/components/DescriptionList/index.js";
-import { Flex, FlexItem } from "@patternfly/react-core/dist/esm/layouts/Flex/index.js";
-
 import { VolumeIcon } from "../icons/gnome-icons.jsx";
 
 import {
@@ -19,16 +17,29 @@ import {
 } from "../pages.jsx";
 import { StorageUsageBar } from "../storage-controls.jsx";
 import { fmt_size_long } from "../utils.js";
-import { fmt_zfs_state, zfs_state_css_class, formatPoolGuid, fmt_dedup_ratio, fmt_fragmentation } from "./utils.jsx";
+import { fmt_zfs_state, formatPoolGuid, fmt_dedup_ratio, fmt_fragmentation } from "./utils.jsx";
 import { ZFSDatasetsCard, create_filesystem, create_volume, create_snapshot } from "./datasets.jsx";
 import { ZFSVdevCard } from "./vdev.jsx";
+import { Label } from "@patternfly/react-core/dist/esm/components/Label/index.js";
 import {
     export_zfs_pool, destroy_zfs_pool,
     clear_errors_zfs_pool, upgrade_zfs_pool,
-    view_history_zfs_pool, view_edit_pool_properties, add_vdev_to_pool,
+    view_history_zfs_pool, view_pool_properties, add_vdev_to_pool,
 } from "./dialogs.jsx";
 
 const _ = cockpit.gettext;
+
+function zfs_state_label_color(state) {
+    switch (state) {
+    case "ONLINE": return "green";
+    case "DEGRADED": return "gold";
+    case "FAULTED":
+    case "UNAVAIL": return "red";
+    case "OFFLINE":
+    case "REMOVED":
+    default: return "grey";
+    }
+}
 
 export function make_zfs_pool_page(parent, pool) {
     const use = [Number(pool.Allocated), Number(pool.Size)];
@@ -94,7 +105,7 @@ export function make_zfs_pool_page(parent, pool) {
     });
     pool_actions.push({
         title: _("View properties"),
-        action: () => view_edit_pool_properties(pool),
+        action: () => view_pool_properties(pool),
     });
 
     pool_actions.push({
@@ -120,7 +131,7 @@ export function make_zfs_pool_page(parent, pool) {
     });
 
     const pool_card = new_card({
-        title: _("ZFS pool"),
+        title: _("Pool"),
         next: null,
         page_location: ["zpool", pool.Name],
         page_name: pool.Name,
@@ -136,14 +147,14 @@ export function make_zfs_pool_page(parent, pool) {
     });
 
     const vdev_card = new_card({
-        title: _("ZFS vdev topology"),
+        title: _("Vdev topology"),
         next: pool_card,
         component: ZFSVdevCard,
         props: { pool },
     });
 
     const datasets_card = new_card({
-        title: _("ZFS datasets"),
+        title: _("Datasets"),
         next: vdev_card,
         component: ZFSDatasetsCard,
         props: { pool },
@@ -167,7 +178,6 @@ export function make_zfs_pool_page(parent, pool) {
 }
 
 const ZFSPoolCard = ({ card, pool, use }) => {
-    const state_css = zfs_state_css_class(pool.State);
     const state_text = fmt_zfs_state(pool.State);
     const health_text = fmt_zfs_state(pool.Health);
 
@@ -190,14 +200,9 @@ const ZFSPoolCard = ({ card, pool, use }) => {
                     <StorageDescription title={_("Name")} value={pool.Name} />
                     <StorageDescription title={_("GUID")} value={formatPoolGuid(pool.GUID)} />
                     <StorageDescription title={_("State")}>
-                        <Flex spaceItems={{ default: 'spaceItemsSm' }}>
-                            <FlexItem>
-                                <span className={"zfs-state-dot " + state_css}>&#x2B24;</span>
-                            </FlexItem>
-                            <FlexItem>
-                                {state_text}
-                            </FlexItem>
-                        </Flex>
+                        <Label isCompact color={zfs_state_label_color(pool.State)}>
+                            {state_text}
+                        </Label>
                     </StorageDescription>
                     <StorageDescription title={_("Health")} value={health_text} />
                     <StorageDescription title={_("Capacity")} value={fmt_size_long(Number(pool.Size))} />
