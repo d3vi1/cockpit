@@ -140,7 +140,7 @@ export function make_zfs_pool_page(parent, pool) {
     });
 
     const datasets_card = new_card({
-        title: _("ZFS pool"),
+        title: _("ZFS datasets"),
         next: vdev_card,
         component: ZFSDatasetsCard,
         props: { pool },

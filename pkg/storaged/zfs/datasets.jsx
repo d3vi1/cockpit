@@ -54,8 +54,12 @@ export function create_filesystem(pool_path, pool_name) {
                                 validate: val => {
                                     if (val === "")
                                         return _("Name cannot be empty");
-                                    if (val.indexOf(" ") >= 0)
-                                        return _("Name cannot contain spaces");
+                                    if (val.startsWith("-"))
+                                        return _("Name cannot start with '-'");
+                                    if (/[\s@#]/.test(val))
+                                        return _("Name cannot contain spaces, '@', or '#'");
+                                    if (val.indexOf("/") >= 0)
+                                        return _("Name cannot contain '/' — enter only the component name");
                                     return null;
                                 },
                             },
@@ -118,10 +122,12 @@ export function create_volume(pool_path, pool_name) {
                 validate: val => {
                     if (val === "")
                         return _("Name cannot be empty");
+                    if (val.startsWith("-"))
+                        return _("Name cannot start with '-'");
                     if (val.indexOf("/") >= 0)
                         return _("Name cannot contain '/'");
-                    if (val.indexOf(" ") >= 0)
-                        return _("Name cannot contain spaces");
+                    if (/[\s@#]/.test(val))
+                        return _("Name cannot contain spaces, '@', or '#'");
                     return null;
                 }
             }),
@@ -236,24 +242,54 @@ function unmount_dataset(pool_path, dataset_name) {
 }
 
 function rename_dataset(pool_path, dataset_name) {
+    // Split into prefix (pool/parent/) and the leaf component
+    const slash_idx = dataset_name.lastIndexOf("/");
+    const prefix = slash_idx >= 0 ? dataset_name.substring(0, slash_idx + 1) : "";
+    const current_component = slash_idx >= 0 ? dataset_name.substring(slash_idx + 1) : dataset_name;
+
     dialog_open({
         Title: cockpit.format(_("Rename $0"), dataset_name),
         Fields: [
-            TextInput("new_name", _("New name"), {
-                value: dataset_name,
-                validate: val => {
-                    if (val === "")
-                        return _("Name cannot be empty");
-                    if (val === dataset_name)
-                        return _("New name must be different");
-                    return null;
+            {
+                tag: "new_name",
+                title: _("New name"),
+                options: {
+                    validate: val => {
+                        if (val === "")
+                            return _("Name cannot be empty");
+                        if (val.startsWith("-"))
+                            return _("Name cannot start with '-'");
+                        if (/[\s@#/]/.test(val))
+                            return _("Name cannot contain spaces, '/', '@', or '#'");
+                        if (val === current_component)
+                            return _("New name must be different");
+                        return null;
+                    },
+                },
+                initial_value: current_component,
+                render: (val, change, validated) => {
+                    return (
+                        <InputGroup>
+                            { prefix && <InputGroupText>{prefix}</InputGroupText> }
+                            <InputGroupItem isFill>
+                                <TextInputPF
+                                    data-field="new_name"
+                                    data-field-type="text-input"
+                                    validated={validated}
+                                    aria-label={_("New name")}
+                                    value={val}
+                                    onChange={(_event, value) => change(value)} />
+                            </InputGroupItem>
+                        </InputGroup>
+                    );
                 }
-            }),
+            },
         ],
         Action: {
             Title: _("Rename"),
             action: async function (vals) {
-                await client.zfs_pool_call(pool_path, "RenameDataset", [dataset_name, vals.new_name, {}]);
+                const full_new_name = prefix + vals.new_name;
+                await client.zfs_pool_call(pool_path, "RenameDataset", [dataset_name, full_new_name, {}]);
             }
         }
     });
@@ -280,8 +316,10 @@ function clone_snapshot(pool_path, snapshot_name) {
                 validate: val => {
                     if (val === "")
                         return _("Clone name cannot be empty");
-                    if (val.indexOf(" ") >= 0)
-                        return _("Name cannot contain spaces");
+                    if (val.startsWith("-"))
+                        return _("Name cannot start with '-'");
+                    if (/[\s@#]/.test(val))
+                        return _("Name cannot contain spaces, '@', or '#'");
                     return null;
                 }
             }),
@@ -430,7 +468,7 @@ export const ZFSDatasetsCard = ({ card, pool }) => {
                         {_("Unmount")}
                     </StorageMenuItem>
                     : null,
-                d.type === "filesystem" && !d.mounted
+                d.type === "filesystem" && !d.mounted && d.mountpoint !== "legacy" && d.mountpoint !== "none"
                     ? <StorageMenuItem key="mount"
                                        onClick={() => mount_dataset(pool_path, d.name)}>
                         {_("Mount")}

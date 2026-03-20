@@ -326,14 +326,14 @@ class TestStorageZFS(storagelib.StorageCase):
         b.wait_visible(self.card("ZFS pool"))
 
         # The datasets table should show the root dataset
-        b.wait_in_text(self.card("ZFS pool"), "testpool0")
+        b.wait_in_text(self.card("ZFS datasets"), "testpool0")
 
         # Create a filesystem via the CLI and verify it appears
         m.execute("zfs create testpool0/myfs")
 
         # The datasets table updates via D-Bus events; wait for it
         with b.wait_timeout(30):
-            b.wait_in_text(self.card("ZFS pool"), "testpool0/myfs")
+            b.wait_in_text(self.card("ZFS datasets"), "testpool0/myfs")
 
 
 if __name__ == '__main__':
